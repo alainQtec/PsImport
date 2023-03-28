@@ -1,72 +1,11 @@
 using namespace System.Management.Automation.Language
 #region    Classes
-class FunctionDetails {
-    [string]$Name
-    [string]$Path
-    [string]$Source
-    [System.Collections.ArrayList]$Commands = @()
-    hidden [string]$DefaultParameterSet
-    hidden [scriptblock]$ScriptBlock
-    hidden [PsmoduleInfo]$Module
-    hidden [bool]$CmdletBinding
-    hidden [string]$Description
-    hidden [string]$ModuleName
-    hidden [version]$Version
-    hidden [string]$HelpFile
-    hidden [string]$HelpUri
-    hidden [string]$Noun
-    hidden [string]$Verb
-    hidden [ValidateNotNull()][System.Management.Automation.Language.FunctionDefinitionAST]$Definition
-    FunctionDetails ([string]$Path, [string]$Name, [scriptblock]$ScriptBlock) {
-        $FnDetails = @(); $FncDefinition = [PsImport]::GetFncDefinition($ScriptBlock)
-        foreach ($FncAST in $FncDefinition) { $FnDetails += [FunctionDetails]::Create($path, $FncAST, $false) }
-        $this.Definition = $FnDetails.Definition;
-        $this.Path = Resolve-FilePath -Path $path -NoAmbiguous
-        $this.Source = $this.Path.Split([IO.Path]::DirectorySeparatorChar)[-2]
-        $this.Name = $Name; $this.SetCommands($false); $this.Module = Get-Module -Name $this.Source -ErrorAction Ignore
-    }
-    FunctionDetails ([string]$Path, [System.Management.Automation.Language.FunctionDefinitionAST]$Raw, [Bool]$UseTitleCase) {
-        $this.Definition = $Raw;
-        $this.Path = Resolve-FilePath -Path $path -NoAmbiguous
-        $this.Source = $this.Path.Split([IO.Path]::DirectorySeparatorChar)[-2]
-        $this.SetCommands($UseTitleCase); $this.Module = Get-Module -Name $this.Source -ErrorAction Ignore
-        $this.name = if ($UseTitleCase) { [PsImport]::ToTitleCase($this.Definition.name) } else { $this.Definition.name }
-        $this.ScriptBlock = [scriptblock]::Create("$($this.Definition.Extent.Text)")
-    }
-    FunctionDetails ([string]$Path, [System.Management.Automation.Language.FunctionDefinitionAST]$Raw, [string[]]$NamesToExculde, [Bool]$UseTitleCase) {
-        $this.Definition = $Raw;
-        $this.Path = Resolve-FilePath -Path $path -NoAmbiguous
-        $this.Source = $this.Path.Split([IO.Path]::DirectorySeparatorChar)[-2]
-        $this.SetCommands($NamesToExculde, $UseTitleCase); $this.Module = Get-Module -Name $this.Source -ErrorAction Ignore
-        $this.name = if ($UseTitleCase) { [PsImport]::ToTitleCase($this.Definition.name) } else { $this.Definition.name }
-        $this.ScriptBlock = [scriptblock]::Create("$($this.Definition.Extent.Text)")
-    }
-    [FunctionDetails] Static Create([string]$path, [System.Management.Automation.Language.FunctionDefinitionAST]$RawAST, [bool]$UseTitleCase) {
-        $res = [FunctionDetails]::New($path, $RawAST, $UseTitleCase)
-        [void][PsImport]::Record($res); return $res
-    }
-    [FunctionDetails] Static Create([string]$path, [System.Management.Automation.Language.FunctionDefinitionAST]$RawAST, [string[]]$NamesToExculde, [bool]$UseTitleCase) {
-        $res = [FunctionDetails]::New($path, $RawAST, $NamesToExculde, $UseTitleCase)
-        [void][PsImport]::Record($res); return $res
-    }
-    hidden [void] SetCommands ([bool]$UseTitleCase) {
-        $this.SetCommands(@(), $UseTitleCase)
-    }
-    hidden [void] SetCommands ([string[]]$ExclusionList, [Bool]$UseTitleCase) {
-        $t = $this.Definition.findall({ $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true)
-        if ($t.Count -le 0 ) { return }
-        ($t.GetCommandName() | Select-Object -Unique).Foreach({
-                $Command = if ($UseTitleCase ) { [PsImport]::ToTitleCase($_) } else { $_ };
-                if ($ExclusionList -contains $Command) { continue };
-                $this.Commands.Add($Command)
-            }
-        )
-    }
-}
 Class PsImport {
     static [System.Collections.Generic.List[string]] $ExcludedNames
     static [System.Collections.Generic.Dictionary[string, FunctionDetails]] $Functions # Dictionary of Functions that have already been parsed, so it won't have to do it over again (for performance reasons).
     static [FunctionDetails[]] GetFunction([string]$FnName) { return [PsImport]::GetFunction($FnName, $false) }
+    static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath) { return [PsImport]::GetFunction($FnName, $FilePath, $false) }
+    static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths) { return [PsImport]::GetFunction($FnName, $FilePaths, $false) }
     static [FunctionDetails[]] GetFunction([string]$FnName, [bool]$throwOnFailure) {
         [ValidateNotNullOrEmpty()][string]$FnName = $FnName; $res = @();
         [string[]]$FnNames = switch ($true) {
@@ -85,7 +24,7 @@ Class PsImport {
             if ([bool]$(try { [PsImport]::Functions.Keys.Contains($Name) } catch { $false })) { $res += [PsImport]::Functions["$Name"]; continue }
             $c = Get-Command $Name -CommandType Function -ErrorAction Ignore
             if ($null -eq $c) { continue }
-            [string]$fn = $("function $Name {`n" + $((((($c | Format-List) | Out-String) -Split ('Definition  :')) -split ('CommandType : Function')) -split ("Name        : $($Name)")).TrimEnd().Replace('# .EXTERNALHELP', '# EXTERNALHELP').Trim() + "`n}")
+            [string]$fn = $("function script:$Name {`n" + $((((($c | Format-List) | Out-String) -Split ('Definition  :')) -split ('CommandType : Function')) -split ("Name        : $($Name)")).TrimEnd().Replace('# .EXTERNALHELP', '# EXTERNALHELP').Trim() + "`n}")
             $res += [FunctionDetails]::New($c.Module.Path, $Name, [scriptblock]::Create("$fn"))
         }
         if ($res.Count -eq 0) {
@@ -95,15 +34,12 @@ Class PsImport {
         }
         return $res
     }
-    static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath) { Write-Debug '[string]$FnName, [string]$FilePath' -Debug; return [PsImport]::GetFunction($FnName, $FilePath, $false) }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath, [bool]$throwOnFailure) {
         [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string]$FilePath = $FilePath
-        Write-Debug '[string[]]$FnName, [string]$FilePath, [bool]$throwOnFailure' -Debug;
         [string[]]$FilePaths = if ($FilePath.Contains('*')) { @(Get-Item $FilePath | Where-Object { $_.Attributes.ToString() -ne 'Directory' } | Select-Object -ExpandProperty FullName) } else { @($FilePath) }
         return [PsImport]::GetFunction($FnName, $FilePaths, $throwOnFailure)
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths, [bool]$throwOnFailure) {
-        Write-Debug "[string[]]`$FnName : $($FnName -join ', '), [string[]]`$FilePaths : $($FilePaths -join ', '), [bool]$throwOnFailure" -Debug;
         # Validate paths and select only those which can be resolved
         $_FilePaths = @(); foreach ($path in $FilePaths) {
             if ([string]::IsNullOrWhiteSpace($Path)) { continue };
@@ -187,28 +123,156 @@ Class PsImport {
         ); if ($_nl) { [PsImport]::Functions = [System.Collections.Generic.Dictionary[string, FunctionDetails]]::New() }
         if ($Should_Add) {
             [PsImport]::Functions.Add($result.Name, $result)
-            Write-Debug "Recorded $($result.Name)"
-        } else {
-            Write-Debug "Skipped $($result.Name)"
         }
+        # else { Write-Debug "[Recording] Skipped $($result.Name)" }
     }
     static [void] Record([FunctionDetails[]]$result) {
         foreach ($item in $result) { [PsImport]::Record($item) }
     }
     static [String] ToTitleCase ([string]$String) { return (Get-Culture).TextInfo.ToTitleCase($String.ToLower()) }
-    static [void] UnLoad([string]$FnName) {
-        #Todo: Complete this method:
-        #Unloads function $FnName from current session
-        #Notes: Maybe [System.Management.Automation.SessionState]$session param will be required
-        # Trying to reverse: https://www.infosecmatter.com/metasploit-module-library/?mm=post/windows/manage/powershell/load_script
-    }
     static [hashtable] ReadPSDataFile([string]$FilePath) {
         return [scriptblock]::Create("$(Get-Content $FilePath | Out-String)").Invoke()
+    }
+}
+class FunctionDetails {
+    [string]$Name
+    [string]$Path
+    [string]$Source
+    [System.Collections.ArrayList]$Commands = @()
+    hidden [string]$DefaultParameterSet
+    hidden [scriptblock]$ScriptBlock
+    hidden [PsmoduleInfo]$Module
+    hidden [string]$Description
+    hidden [string]$ModuleName
+    hidden [version]$Version
+    hidden [string]$HelpUri
+    hidden [string]$Noun
+    hidden [string]$Verb
+    hidden [ValidateNotNull()][System.Management.Automation.Language.FunctionDefinitionAST]$Definition
+    FunctionDetails ([string]$Path, [string]$Name, [scriptblock]$ScriptBlock) {
+        $FnDetails = @(); $FncDefinition = [PsImport]::GetFncDefinition($ScriptBlock)
+        foreach ($FncAST in $FncDefinition) { $FnDetails += [FunctionDetails]::Create($path, $FncAST, $false) }
+        $this.Definition = $FnDetails.Definition;
+        $this.Path = Resolve-FilePath -Path $path -NoAmbiguous
+        $this.Source = $this.Path.Split([IO.Path]::DirectorySeparatorChar)[-2]
+        $this.SetName($Name) ; $this.SetCommands($false); $this.Module = Get-Module -Name $this.Source -ErrorAction Ignore
+        $this.ScriptBlock = [scriptBlock]::Create("$($this.Definition.Extent.Text -replace '(?<=^function\s)(?!script:)', 'script:')")
+    }
+    FunctionDetails ([string]$Path, [System.Management.Automation.Language.FunctionDefinitionAST]$Raw, [Bool]$UseTitleCase) {
+        $this.Definition = $Raw;
+        $this.Path = Resolve-FilePath -Path $path -NoAmbiguous
+        $this.Source = $this.Path.Split([IO.Path]::DirectorySeparatorChar)[-2]
+        $this.SetCommands($UseTitleCase); $this.Module = Get-Module -Name $this.Source -ErrorAction Ignore
+        $this.SetName($(if ($UseTitleCase) { [PsImport]::ToTitleCase($this.Definition.name) } else { $this.Definition.name }))
+        $this.ScriptBlock = [scriptBlock]::Create("$($this.Definition.Extent.Text -replace '(?<=^function\s)(?!script:)', 'script:')")
+    }
+    FunctionDetails ([string]$Path, [System.Management.Automation.Language.FunctionDefinitionAST]$Raw, [string[]]$NamesToExculde, [Bool]$UseTitleCase) {
+        $this.Definition = $Raw;
+        $this.Path = Resolve-FilePath -Path $path -NoAmbiguous
+        $this.Source = $this.Path.Split([IO.Path]::DirectorySeparatorChar)[-2]
+        $this.SetCommands($NamesToExculde, $UseTitleCase); $this.Module = Get-Module -Name $this.Source -ErrorAction Ignore
+        $this.SetName($(if ($UseTitleCase) { [PsImport]::ToTitleCase($this.Definition.name) } else { $this.Definition.name }))
+        $this.ScriptBlock = [scriptBlock]::Create("$($this.Definition.Extent.Text -replace '(?<=^function\s)(?!script:)', 'script:')")
+    }
+    [FunctionDetails] Static Create([string]$path, [System.Management.Automation.Language.FunctionDefinitionAST]$RawAST, [bool]$UseTitleCase) {
+        $res = [FunctionDetails]::New($path, $RawAST, $UseTitleCase)
+        [void][PsImport]::Record($res); return $res
+    }
+    [FunctionDetails] Static Create([string]$path, [System.Management.Automation.Language.FunctionDefinitionAST]$RawAST, [string[]]$NamesToExculde, [bool]$UseTitleCase) {
+        $res = [FunctionDetails]::New($path, $RawAST, $NamesToExculde, $UseTitleCase)
+        [void][PsImport]::Record($res); return $res
+    }
+    hidden [void] SetName([string]$text) {
+        [ValidateNotNullOrEmpty()]$text = $text
+        $text = switch ($true) {
+            $text.StartsWith('script:') { $text.Substring(7); break }
+            $text.StartsWith('local:') { $text.Substring(6); break }
+            Default { $text }
+        }
+        $this.Name = $text
+    }
+    hidden [void] SetCommands ([bool]$UseTitleCase) {
+        $this.SetCommands(@(), $UseTitleCase)
+    }
+    hidden [void] SetCommands ([string[]]$ExclusionList, [Bool]$UseTitleCase) {
+        $t = $this.Definition.findall({ $args[0] -is [System.Management.Automation.Language.CommandAst] }, $true)
+        if ($t.Count -le 0 ) { return }
+        ($t.GetCommandName() | Select-Object -Unique).Foreach({
+                $Command = if ($UseTitleCase ) { [PsImport]::ToTitleCase($_) } else { $_ };
+                if ($ExclusionList -contains $Command) { continue };
+                $this.Commands.Add($Command)
+            }
+        )
     }
 }
 #endregion Classes
 
 #region    Functions
+function Import-Function {
+    <#
+    .SYNOPSIS
+        Import functions from other scripts into the current script.
+    .DESCRIPTION
+        Close to javascript's ESmodule import functionality.
+        Features:
+        + can import many functions at once
+        + Support wildcards. See examples.
+    .NOTES
+        Caution: Not tested well.
+        Inspiration: https://gist.github.com/alainQtec/71123a1d28f37eaa49fd032ba0248650
+    .LINK
+        https://github.com/alainQtec/devHelper.PsImport/blob/main/devHelper.PsImport.psm1
+    .EXAMPLE
+        Import fnName1, fnName2 -From '/relative/path/to/script.ps1'
+        # Imports the functions fnName1 fnName2
+
+    .EXAMPLE
+        Import * -from '/relative/path/to/script.ps1'
+        # Using wildcards for names: All functions in the file get loaded in current script scope.
+
+        Import * -from '/relative/path/to/fileNamedlikeabc*.ps1'
+        # Import all functions in files that look kike ileNamedlikeabc
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'Names')]
+    [Alias("Import", "require")]
+    param (
+        # Names of functions to import
+        [Parameter(Position = 0, Mandatory = $true, ParameterSetName = 'Names')]
+        [ValidateNotNullOrEmpty()]
+        [Alias('functions')]
+        [string[]]$Names,
+
+        # Names of functions to import
+        [Parameter(Position = 0, Mandatory = $true, ParameterSetName = 'Name')]
+        [ValidateNotNullOrEmpty()]
+        [Alias('n', 'function')]
+        [string]$Name,
+
+        # FilePath from which to import
+        [Parameter(Position = 1, Mandatory = $true, ParameterSetName = '__AllParameterSets')]
+        [ValidateNotNullOrEmpty()]
+        [Alias('f', 'From')]
+        [string[]]$path,
+
+        # Minimum version of function to import
+        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'Name')]
+        [ValidateNotNull()][Alias('MinVersion')]
+        [version]$Version
+    )
+
+    begin {
+        [string[]]$fnNames = if ($PSCmdlet.ParameterSetName -eq 'Name') { $Name } else { $Names }
+        $functions = @(); if ($path.Count -eq 1) { [string]$path = $path[0] }
+    }
+    process {
+        foreach ($n in $fnNames) {
+            $functions += [PsImport]::GetFunction($n, $path)
+        }
+        foreach ($function in $functions) {
+            . $function.scriptblock
+        }
+    }
+}
 function Resolve-FilePath {
     <#
     .SYNOPSIS
@@ -267,8 +331,7 @@ function Resolve-FilePath {
         return $resolved
     }
 }
-#endregion Functions
-
+# endregion Functions
 $Private = Get-ChildItem ([IO.Path]::Combine($PSScriptRoot, 'Private')) -Filter "*.ps1" -ErrorAction SilentlyContinue
 $Public = Get-ChildItem ([IO.Path]::Combine($PSScriptRoot, 'Public')) -Filter "*.ps1" -ErrorAction SilentlyContinue
 # Load dependencies
