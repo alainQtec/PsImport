@@ -8,7 +8,6 @@
 .EXAMPLE
     .\build.ps1 -Task deploy
 #>
-# [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingInvokeExpression", '')]
 [cmdletbinding(DefaultParameterSetName = 'task')]
 param(
     # $Tasks = @('Init', 'Clean', 'Compile', 'Import', 'Test', 'Deploy')
@@ -42,13 +41,9 @@ Begin {
     [Environment]::SetEnvironmentVariable('IsAC', $(if (![string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('GITHUB_WORKFLOW'))) { '1' } else { '0' }), [System.EnvironmentVariableTarget]::Process)
     [Environment]::SetEnvironmentVariable('IsCI', $(if (![string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('TF_BUILD'))) { '1' }else { '0' }), [System.EnvironmentVariableTarget]::Process)
     [Environment]::SetEnvironmentVariable('RUN_ID', $(if ([bool][int]$env:IsAC) { [Environment]::GetEnvironmentVariable('GITHUB_RUN_ID') }else { [Guid]::NewGuid().Guid.substring(0, 21).replace('-', [string]::Join('', (0..9 | Get-Random -Count 1))) + '_' }), [System.EnvironmentVariableTarget]::Process);
-    $script:localizedData = if ($null -ne (Get-Command Get-LocalizedData -ErrorAction SilentlyContinue)) {
-        Get-LocalizedData -DefaultUICulture 'en-US'
-    } else {
-        $dataFile = [System.IO.FileInfo]::new([IO.Path]::Combine((Get-Location), 'en-US', 'devHelper.PsImport.strings.psd1'))
-        if (!$dataFile.Exists) { throw [System.IO.FileNotFoundException]::new('Unable to find the LocalizedData file.', 'devHelper.PsImport.strings.psd1') }
-        [scriptblock]::Create("$([IO.File]::ReadAllText($dataFile))").Invoke()
-    }
+    $dataFile = [System.IO.FileInfo]::new([IO.Path]::Combine($PSScriptRoot, 'en-US', 'devHelper.PsImport.strings.psd1'))
+    if (!$dataFile.Exists) { throw [System.IO.FileNotFoundException]::new('Unable to find the LocalizedData file.', 'devHelper.PsImport.strings.psd1') }
+    $script:localizedData = [scriptblock]::Create("$([IO.File]::ReadAllText($dataFile))").Invoke() # same as "Get-LocalizedData -DefaultUICulture 'en-US'" but the cmdlet is not always installed
     #region    ScriptBlocks
     $script:PSake_ScriptBlock = [scriptblock]::Create({
             # PSake makes variables declared here available in other scriptblocks
@@ -122,37 +117,32 @@ Begin {
                 Write-Verbose "Create module Output directory"
                 New-Item -Path $outputModVerDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
                 Write-Verbose "Add Module files ..."
+                $ModuleManifest = [IO.FileInfo]::New([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
+                if (!$ModuleManifest.Exists) { throw [System.IO.FileNotFoundException]::New('Could Not Create Module Manifest!') }
                 try {
-                    foreach ($Item in @(
-                            "bin"
-                            "en-US"
-                            "Private"
-                            "Public"
-                            "LICENSE"
-                            "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psd1"
-                        )
-                    ) {
-                        Copy-Item -Recurse -Path $([IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildScriptPath')), $Item)) -Destination $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModulePath'))
-                    }
-                    if (![IO.File]::Exists($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest')))) {
-                        Throw "Could Not Create Module Manifest!"
-                    }
+                    @(
+                        "bin"
+                        "en-US"
+                        "Private"
+                        "Public"
+                        "LICENSE"
+                        "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psd1"
+                    ).ForEach({ Copy-Item -Recurse -Path $([IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildScriptPath')), $_)) -Destination $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModulePath')) })
                 } catch {
                     throw $_
                 }
                 $Psm1Path = [IO.Path]::Combine($outputModVerDir, "$(([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psm1")
-                $functionsToExport = @()
-                $publicFunctionsPath = [IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath')), "Public")
+                $functionsToExport = @(); $publicFunctionsPath = [IO.Path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'), "Public")
                 if (Test-Path $publicFunctionsPath -PathType Container -ErrorAction SilentlyContinue) {
                     Get-ChildItem -Path $publicFunctionsPath -Filter "*.ps1" -Recurse -File | ForEach-Object {
                         $functionsToExport += $_.BaseName
                     }
                 }
-                $PsModuleContent = Get-Content -Path ([IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath')), "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psm1" )) -Raw
+                $PsModuleContent = Get-Content -Path ([IO.Path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'), "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psm1" )) -Raw
                 $PsModuleContent = $PsModuleContent.Replace("'<Aliases>'", "'Encrypt', 'Decrypt'")
                 Write-Verbose -Message "Editing $((Get-Item $Psm1Path).BaseName) ..."
                 $PsModuleContent | Add-Content -Path $(New-Item -Path $Psm1Path -ItemType File -Force) -Encoding UTF8
-                $manifestContent = Get-Content -Path $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest')) -Raw
+                $manifestContent = Get-Content -Path $ModuleManifest -Raw
                 $publicFunctionNames = Get-ChildItem -Path $publicFunctionsPath -Filter "*.ps1" | Select-Object -ExpandProperty BaseName
 
                 Write-Verbose -Message 'Creating psd1 ...'
@@ -166,7 +156,7 @@ Begin {
                 ).Replace(
                     "<Year>", ([Datetime]::Now.Year)
                 )
-                $manifestContent | Set-Content -Path $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
+                $manifestContent | Set-Content -Path $ModuleManifest
                 if ((Get-ChildItem $outputModVerDir | Where-Object { $_.Name -eq "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1" }).BaseName -cne $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))) {
                     "    Renaming manifest to correct casing"
                     Rename-Item (Join-Path $outputModVerDir "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1") -NewName "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1" -Force
@@ -314,10 +304,9 @@ Begin {
                                 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
                                 Add-Type -Assembly System.IO.Compression.FileSystem
                                 [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $zipPath)
-                                "    Publishing Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub..."
+                                "    Publishing Release v$($versionToDeploy.ToString()) @ commit Id [$($commitId)] to GitHub..."
                                 $ReleaseNotes = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
                                 $ReleaseNotes += (git log -1 --pretty=%B | Select-Object -Skip 2) -join "`n"
-                                $ReleaseNotes += "`n`n***`n`n# Instructions`n`n"
                                 $ReleaseNotes += $script:localizedData.ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy.ToString())
                                 Set-EnvironmentVariable -name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $ReleaseNotes
                                 $gitHubParams = @{
@@ -509,9 +498,10 @@ Begin {
 
         Process {
             if (![bool][int]$env:IsAC) {
-                $LocEnvFile = [IO.Path]::Combine($Path, '.env')
-                if (![IO.File]::Exists($LocEnvFile)) {
-                    throw [System.Management.Automation.ItemNotFoundException]::new("No .env file")
+                $LocEnvFile = [IO.FileInfo]::New([IO.Path]::GetFullPath([IO.Path]::Combine($Path, '.env')))
+                if (!$LocEnvFile.Exists) {
+                    New-Item -Path $LocEnvFile.FullName -ItemType File -ErrorAction Stop
+                    Write-BuildLog "Created a new .env file"
                 }
                 # Set all Default/Preset Env: variables from the .env
                 [dotEnv]::Set($LocEnvFile);
