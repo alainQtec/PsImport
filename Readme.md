@@ -1,8 +1,8 @@
 # [**PsImport**](https://github.com/alainQtec/devHelper.PsImport)
 
-A module to **import functions** from PowerShell scripts in your project, and `remote scripts`* making it easier to organize and reuse your code.
+A module to **import functions** from PowerShell scripts in your project, and "remote scripts"* making it easier to organize and reuse your code.
 
-**Its a somehow similar functionality to JavaScript's ES module import feature* but this still has security concerns.
+The remote scripts part **is a somehow similar functionality to JavaScript's ES module import feature* but this is still is security concerns. (ideas are welcome!)
 
 ## **Installation**
 
@@ -12,47 +12,45 @@ Install-Module devHelper.PsImport
 
 ## **Features**
 
-`1.` **Supports wildcards**:
+* **Supports wildcards**:
 
-```PowerShell
-Import * -from '/relative/path/to/script.ps1'
-```
+    ```PowerShell
+    Import * -from '/relative/path/to/script.ps1'
+    ```
 
-Will load functions in the file get loaded in current script scope.
+    Will load functions from the file into current script scope.
 
-`2.` **Importing from many files at once**:
+* **Importing from many files at once**:
 
-```PowerShell
-Import * -from '/relative/path/to/fileNamedlikeabc*.ps1'
-```
+    ```PowerShell
+    Import * -from '/relative/path/to/fileNamedlikeabc*.ps1'
+    ```
 
-Will load all functions from in files that look kike ileNamedlikeabc
+    Will load all functions from .ps1 files that look like fileNamedlikeabc
 
+* **Import a function(s) from same repo**
 
-`3.` **Import a function(s) from same repo**
+    ```PowerShell
+    Import funcName1, funcName2 -from fileNameb
+    ```
 
-```PowerShell
-Import funcName1, funcName2 -from fileNameb
-```
-Will load all functions funcName1 and funcName2
+    Will only load functions funcName1 and funcName2 from fileNameb.
 
-*if you are sure no other file is named fileNameb is in the repo.
+    *if you are sure no other file is named fileNameb is in the repo.
 
-`4.` **Import a function(s) from a remote script**
+* **Import a function(s) from a remote script**
 
-```PowerShell
-Import funcName -from https://example.com/MyRemoteScript.ps1
-```
+    ```PowerShell
+    Import funcName -from https://example.com/MyRemoteScript.ps1
+    ```
 
 ## **Todos**
 
 Here are features currently being built:
 
-`1.` Add build scripts
+* Securely import remote scripts.
 
-`2.` Securely import remote scripts.
-
-`3.` Fix edge cases when parsing files.
+* Fix edge cases when parsing files.
 
 ie: Sometimes it does not find all function declarations in file $filepath.
 
@@ -62,8 +60,7 @@ ie: Sometimes it does not find all function declarations in file $filepath.
 
 For now it Works as expected only when there is a clear newline char (ie: "`n") between each function in the file.
 
-`4.` Add "Import a function from a module" feature
-
+* Add "Import a function from a module" feature
 
 ## **Contributing**
 
@@ -71,4 +68,4 @@ If you would like to contribute to psimport, please feel free to submit a pull r
 
 ## **License**
 
-This module is licensed under the MIT License.
+This module is licensed under the MIT [License](LICENSE).
