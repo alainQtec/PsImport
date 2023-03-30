@@ -2,7 +2,7 @@
 
 A module to **import functions** from PowerShell scripts in your project, and "remote scripts"* making it easier to organize and reuse your code.
 
-The remote scripts part **is a somehow similar functionality to JavaScript's ES module import feature* but this is still is security concerns. (ideas are welcome!)
+The remote scripts part **is a somehow similar functionality to JavaScript's ES module import feature* but this is still is security concerns. ([ideas are welcome](https://github.com/alainQtec/devHelper.PsImport/discussions/1)!)
 
 ## **Installation**
 
