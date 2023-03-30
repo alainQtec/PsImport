@@ -399,3 +399,5 @@ FodyWeavers.xsd
 .fn
 
 .env
+Tests/results.xml
+Tests/Resources/
