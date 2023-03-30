@@ -532,7 +532,7 @@ Begin {
             Set-EnvironmentVariable -Name ('{0}{1}' -f $env:RUN_ID, 'PSModulePath') -Value $([IO.path]::Combine($BuildOutput, $ProjectName, $BuildNumber))
             Set-EnvironmentVariable -Name ('{0}{1}' -f $env:RUN_ID, 'PSModuleManifest') -Value $([IO.path]::Combine($BuildOutput, $ProjectName, $BuildNumber, "$ProjectName.psd1"))
             Set-EnvironmentVariable -Name ('{0}{1}' -f $env:RUN_ID, 'ModulePath') -Value $(if (![string]::IsNullOrWhiteSpace($Env:PSModuleManifest)) { [IO.Path]::GetDirectoryName($Env:PSModuleManifest) }else { [IO.Path]::GetDirectoryName($BuildOutput) })
-            Set-EnvironmentVariable -Name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $("# Changelog`n`n")
+            Set-EnvironmentVariable -Name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $script:localizedData.ReleaseNotes
         }
     }
     function Get-Elapsed {
@@ -625,7 +625,7 @@ Begin {
             } catch {
                 $PSCmdlet.ThrowTerminatingError(
                     [System.Management.Automation.ErrorRecord]::new(
-                        [System.InvalidOperationException]::new("Failed to find PowerShell Gallery release for '$Name' at version '$Version': $($_.Exception.Message)"), 'RestMethod_Failed',
+                        [System.InvalidOperationException]::new("Failed to find PowerShell Gallery release for '$moduleName' at version '$Version'. $($_.Exception.Message)"), 'RestMethod_Failed',
                         [System.Management.Automation.ErrorCategory]::OperationStopped,
                         $url
                     )

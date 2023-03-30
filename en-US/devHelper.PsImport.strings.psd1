@@ -2,6 +2,12 @@
     ModuleName    = 'devHelper.PsImport'
     ModuleVersion = [System.Management.Automation.SemanticVersion]::new(0, 1, 0)
     ReleaseNotes  = @"
+# Changelog`n`n
+
+* Added support for wilcard names
+* Added import from multiple files
+* Added import from url
+
 `n`n***`n`n# Install guide:`n`n
 1. [Click here](https://github.com/alainQtec/devHelper.PsImport/releases/download/v<versionToDeploy>/devHelper.PsImport.zip) to download the *devHelper.PsImport.zip* file attached to the release.
 2. **If on Windows**: Right-click the downloaded zip, select Properties, then unblock the file.
