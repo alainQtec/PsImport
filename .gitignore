@@ -404,6 +404,6 @@ FodyWeavers.xsd
 # Generated test Files:
 Tests/results.xml
 Tests/Resources/
-Tests/devHelper.PsImport.Module.Tests
+Tests/devHelper.PsImport.Module.Tests.ps1
 Tests/devHelper.PsImport.Features.Tests.ps1
 Tests/devHelper.PsImport.Intergration.Tests.ps1
