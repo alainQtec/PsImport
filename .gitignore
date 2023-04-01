@@ -398,6 +398,12 @@ FodyWeavers.xsd
 *.sln.iml
 .fn
 
+# dotEnv
 .env
+
+# Generated test Files:
 Tests/results.xml
 Tests/Resources/
+Tests/devHelper.PsImport.Module.Tests
+Tests/devHelper.PsImport.Features.Tests.ps1
+Tests/devHelper.PsImport.Intergration.Tests.ps1
