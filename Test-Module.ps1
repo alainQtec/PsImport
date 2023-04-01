@@ -197,12 +197,12 @@ process {
             }
         }
     } else {
+        Remove-Item $mtTestsPath -Force
         if ($skipBuildOutputTest.IsPresent) {
             Write-Warning "No Build OutPut, moving on .."
         } else {
             throw 'No Build OutPut!'
         }
-        Remove-Item $mtTestsPath -Force
     }
     Write-Host "[+] Running tests ..." -ForegroundColor Green
     # Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
