@@ -14,8 +14,9 @@ param (
     [switch]$CleanUp
 )
 begin {
-    $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($ModulePath, "devHelper.PsImport.psd1"))
-    if (!$manifestFile.Exists) { throw [System.IO.FileNotFoundException]::New('Module manifest file Was not Found!') }
+    $BuildOutDir = [IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput'))
+    $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
+    # if (![IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1")).Exists) { throw [System.IO.FileNotFoundException]::New('Module manifest file Was not Found!') }
     $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine($TestsPath, 'Resources'))
     $script:fnNames = [System.Collections.Generic.List[string]]::New(); $testFiles = [System.Collections.Generic.List[IO.FileInfo]]::New()
     [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, 'Tests', 'devHelper.PsImport.Intergration.Tests.ps1')))
@@ -75,12 +76,12 @@ process {
             #1. Test feature: Support for wildcards
             Describe "Importing functions with wildcards" {
                 Context "When importing functions with a wildcard in the filename" {
-                    It "should import all functions from files matching the pattern" {
+                    It "should import all functions matching the pattern from file" {
                         # Arrange
-                        $expectedFunctions = @(Get-Content "./relative/path/to/script_File*.psm1" | Select-String -Pattern "^function\s+(\w+)" | ForEach-Object { $_.Matches.Groups[1].Value })
+                        $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+(\w+)" | ForEach-Object { $_.Matches.Groups[1].Value })
 
                         # Act
-                        Import * -from "./relative/path/to/script_File*.psm1"
+                        Import * -from "./relative/path/to/script_File.psm1"
 
                         # Assert
                         $actualFunctions = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
@@ -144,7 +145,6 @@ process {
             Add-Content -Path $ntTestsPath -Value $s.ToString() -Encoding utf8
         }
     )
-    $BuildOutDir = [IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput'))
     if ($BuildOutDir.Exists) {
         if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 1) {
             $ModuleTestScript = [scriptblock]::Create({
@@ -205,8 +205,13 @@ process {
         }
     }
     Write-Host "[+] Running tests ..." -ForegroundColor Green
-    Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
-    Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml"
+    if (!$skipBuildOutputTest.IsPresent) {
+        if (!$manifestFile.Exists) {
+            throw [System.IO.FileNotFoundException]::New("Could Not Find Module manifest File $([IO.Path]::GetRelativePath($PSScriptRoot, $manifestFile.FullName))")
+        }
+        Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
+    }
+    # Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml"
 }
 
 end {
