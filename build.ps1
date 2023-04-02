@@ -119,7 +119,6 @@ Begin {
                 Write-Verbose "Add Module files ..."
                 try {
                     @(
-                        "bin"
                         "en-US"
                         "Private"
                         "Public"
