@@ -205,8 +205,8 @@ process {
         }
     }
     Write-Host "[+] Running tests ..." -ForegroundColor Green
-    # Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
-    # Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml"
+    Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
+    Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml"
 }
 
 end {
