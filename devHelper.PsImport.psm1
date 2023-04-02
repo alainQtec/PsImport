@@ -36,7 +36,7 @@ Class PsImport {
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath, [bool]$throwOnFailure) {
         [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string]$FilePath = $FilePath
-        [string[]]$FilePaths = if ($FilePath.Contains('*')) { @(Get-Item $FilePath | Where-Object { $_.Attributes.ToString() -ne 'Directory' } | Select-Object -ExpandProperty FullName) } else { @($FilePath) }
+        [string[]]$FilePaths = if ($FilePath.Contains('*') -or ([IO.DirectoryInfo]::new($FilePath).Attributes -eq 'Directory')) { @(Get-Item $FilePath | Where-Object { $_.Attributes.ToString() -ne 'Directory' } | Select-Object -ExpandProperty FullName) } else { @($FilePath) }
         return [PsImport]::GetFunction($FnName, $FilePaths, $throwOnFailure)
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths, [bool]$throwOnFailure) {
