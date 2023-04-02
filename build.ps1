@@ -117,8 +117,6 @@ Begin {
                 Write-Verbose "Create module Output directory"
                 New-Item -Path $outputModVerDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
                 Write-Verbose "Add Module files ..."
-                $ModuleManifest = [IO.FileInfo]::New([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
-                if (!$ModuleManifest.Exists) { throw [System.IO.FileNotFoundException]::New('Could Not Create Module Manifest!') }
                 try {
                     @(
                         "bin"
@@ -131,6 +129,8 @@ Begin {
                 } catch {
                     throw $_
                 }
+                $ModuleManifest = [IO.FileInfo]::New([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
+                if (!$ModuleManifest.Exists) { throw [System.IO.FileNotFoundException]::New('Could Not Create Module Manifest!') }
                 $Psm1Path = [IO.Path]::Combine($outputModVerDir, "$(([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psm1")
                 $functionsToExport = @(); $publicFunctionsPath = [IO.Path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'), "Public")
                 if (Test-Path $publicFunctionsPath -PathType Container -ErrorAction SilentlyContinue) {
