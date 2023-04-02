@@ -116,6 +116,7 @@ Begin {
             Task Compile -depends Clean {
                 Write-Verbose "Create module Output directory"
                 New-Item -Path $outputModVerDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+                $ModuleManifest = [IO.FileInfo]::New([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
                 Write-Verbose "Add Module files ..."
                 try {
                     @(
@@ -123,28 +124,23 @@ Begin {
                         "Private"
                         "Public"
                         "LICENSE"
-                        "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psd1"
+                        "$($ModuleManifest.Name)"
+                        "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psm1"
                     ).ForEach({ Copy-Item -Recurse -Path $([IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildScriptPath')), $_)) -Destination $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModulePath')) })
                 } catch {
                     throw $_
                 }
-                $ModuleManifest = [IO.FileInfo]::New([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
                 if (!$ModuleManifest.Exists) { throw [System.IO.FileNotFoundException]::New('Could Not Create Module Manifest!') }
-                $Psm1Path = [IO.Path]::Combine($outputModVerDir, "$(([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psm1")
                 $functionsToExport = @(); $publicFunctionsPath = [IO.Path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'), "Public")
                 if (Test-Path $publicFunctionsPath -PathType Container -ErrorAction SilentlyContinue) {
                     Get-ChildItem -Path $publicFunctionsPath -Filter "*.ps1" -Recurse -File | ForEach-Object {
                         $functionsToExport += $_.BaseName
                     }
                 }
-                $PsModuleContent = Get-Content -Path ([IO.Path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'), "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psm1" )) -Raw
-                $PsModuleContent = $PsModuleContent.Replace("'<Aliases>'", "'Encrypt', 'Decrypt'")
-                Write-Verbose -Message "Editing $((Get-Item $Psm1Path).BaseName) ..."
-                $PsModuleContent | Add-Content -Path $(New-Item -Path $Psm1Path -ItemType File -Force) -Encoding UTF8
                 $manifestContent = Get-Content -Path $ModuleManifest -Raw
                 $publicFunctionNames = Get-ChildItem -Path $publicFunctionsPath -Filter "*.ps1" | Select-Object -ExpandProperty BaseName
 
-                Write-Verbose -Message 'Creating psd1 ...'
+                Write-Verbose -Message "Editing $($ModuleManifest.Name) ..."
                 # Using .Replace() is Better than Update-ModuleManifest as this does not destroy the Indentation in the Psd1 file.
                 $manifestContent = $manifestContent.Replace(
                     "'<FunctionsToExport>'", $(if ((Test-Path -Path $publicFunctionsPath) -and $publicFunctionNames.count -gt 0) { "'$($publicFunctionNames -join "',`n        '")'" }else { $null })
@@ -174,33 +170,16 @@ Begin {
             Task Test -depends Init {
                 '    Importing Pester'
                 Import-Module Pester -Verbose:$false -Force -ErrorAction Stop
-                Push-Location
-                Set-Location -PassThru $outputModDir
-                if (-not $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'))) {
-                    Set-BuildEnvironment -Path $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildScriptPath'))\..
-                }
-
+                Push-Location $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'))
                 $origModulePath = $Env:PSModulePath
-                if ( $Env:PSModulePath.split($pathSeperator) -notcontains $outputDir ) {
+                if ($Env:PSModulePath.split($pathSeperator) -notcontains $outputDir ) {
                     $Env:PSModulePath = ($outputDir + $pathSeperator + $origModulePath)
                 }
-
                 Remove-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')) -ErrorAction SilentlyContinue -Verbose:$false
                 Import-Module $outputModDir -Force -Verbose:$false
-                $testResultsXml = Join-Path -Path $outputDir -ChildPath $TestFile
-                $pesterParams = @{
-                    OutputFormat = 'NUnitXml'
-                    OutputFile   = $testResultsXml
-                    PassThru     = $true
-                    Path         = $tests
-                }
-                if ($script:ExcludeTag) {
-                    $pesterParams['ExcludeTag'] = $script:ExcludeTag
-                    "    Invoking Pester and excluding tag(s) [$($script:ExcludeTag -join ', ')] ..."
-                } else {
-                    '    Invoking Pester ...'
-                }
-                $testResults = Invoke-Pester @pesterParams
+                $test_Script = [IO.FileInfo]::New('Test-Module.ps1')
+                if (!$test_Script.Exists) { throw [System.IO.FileNotFoundException]::New($test_Script.FullName) }
+                $testResults = & $test_Script
                 '    Pester invocation complete!'
                 if ($testResults.FailedCount -gt 0) {
                     $testResults | Format-List
@@ -1055,7 +1034,6 @@ Process {
             Install-Module "$PkgRepoName" -MinimumVersion $PKGRepoHash[$PkgRepoName] -Force -AllowClobber -SkipPublisherCheck -Scope CurrentUser -Verbose:$false -ErrorAction SilentlyContinue
         }
     }
-
     Invoke-CommandWithLog { Get-PackageProvider -Name Nuget -ForceBootstrap -Verbose:$false }
     if (!(Get-PackageProvider -Name Nuget)) {
         Invoke-CommandWithLog { Install-PackageProvider -Name NuGet -Force | Out-Null }
@@ -1064,6 +1042,7 @@ Process {
     if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
         Invoke-CommandWithLog { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -Verbose:$false }
     }
+    $host.ui.WriteLine()
     Invoke-CommandWithLog { $PSDefaultParameterValues = @{
             '*-Module:Verbose'            = $false
             'Import-Module:ErrorAction'   = 'Stop'
