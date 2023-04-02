@@ -18,6 +18,7 @@ begin {
     $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
     # if (![IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1")).Exists) { throw [System.IO.FileNotFoundException]::New('Module manifest file Was not Found!') }
     $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine($TestsPath, 'Resources'))
+    $resRlPath = [IO.Path]::GetRelativePath($PSScriptRoot, $Resources.FullName)
     $script:fnNames = [System.Collections.Generic.List[string]]::New(); $testFiles = [System.Collections.Generic.List[IO.FileInfo]]::New()
     [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, 'Tests', 'devHelper.PsImport.Intergration.Tests.ps1')))
     [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, 'Tests', 'devHelper.PsImport.Features.Tests.ps1')))
@@ -72,20 +73,21 @@ process {
     $ntTestsPath = $testFiles.Where({ $_.BaseName -eq 'devHelper.PsImport.Intergration.Tests' }).FullName
     $ftTestsPath = $testFiles.Where({ $_.BaseName -eq 'devHelper.PsImport.Features.Tests' }).FullName
     $mtTestsPath = $testFiles.Where({ $_.BaseName -eq 'devHelper.PsImport.Module.Tests' }).FullName
+    $scriptNames = $testFiles.Where({ $_.Extension -eq '.ps1' -and $_.BaseName.Contains('-') }).BaseName
     $ftTestScrpt = [scriptblock]::Create({
+            function Assert-LoadedFunctions {
+                param ([Parameter(Mandatory)][string[]]$Names)
+                $f = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
+                $s = $true; $Names.ForEach({ $s = $s -and $f.Contains($_) })
+                return $s
+            }
             #1. Test feature: Support for wildcards
             Describe "Importing functions with wildcards" {
                 Context "When importing functions with a wildcard in the filename" {
                     It "should import all functions matching the pattern from file" {
-                        # Arrange
                         $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
-
-                        # Act
                         Import * -from "./relative/path/to/script_File.psm1"
-
-                        # Assert
-                        $actualFunctions = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
-                        $actualFunctions | Should -BeEquivalentTo $expectedFunctions
+                        Assert-LoadedFunctions $expectedFunctions | Should be $true
                     }
                 }
             }
@@ -94,14 +96,9 @@ process {
             Describe "Importing functions from multiple files" {
                 Context "When importing functions from multiple files" {
                     It "should import all functions from all files" {
-                        # Arrange
                         $expectedFunctions = @(Get-Content "./relative/path/to/fileNamedlikeabc*.ps1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
-                        # Act
                         Import * -from "./relative/path/to/fileNamedlikeabc*.ps1"
-
-                        # Assert
-                        $actualFunctions = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
-                        $actualFunctions | Should -BeEquivalentTo $expectedFunctions
+                        Assert-LoadedFunctions $expectedFunctions | Should be $true
                     }
                 }
             }
@@ -109,15 +106,9 @@ process {
             Describe "Importing specific functions from the same repo" {
                 Context "When importing specific functions from the same repo" {
                     It "should import only the specified functions from the specified file" {
-                        # Arrange
                         $expectedFunctions = @('funcName1', 'funcName2')
-
-                        # Act
-                        Import funcName1, funcName2 -from ./fileNameb.ps1
-
-                        # Assert
-                        $actualFunctions = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
-                        $actualFunctions | Should -BeEquivalentTo $expectedFunctions
+                        Import 'funcName1', 'funcName2' -from "./repo"
+                        Assert-LoadedFunctions $expectedFunctions | Should be $true
                     }
                 }
             }
@@ -125,19 +116,26 @@ process {
             Describe "Importing specific functions from a remote script" {
                 Context "When importing specific functions from a remote script" {
                     It "should import only the specified function from the remote script" {
-                        # Arrange
                         $expectedFunctions = @('funcName')
-
-                        # Act
                         Import funcName -from 'https://example.com/MyRemote'
-                        # Assert
-                        $actualFunctions = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
-                        $actualFunctions | Should -BeEquivalentTo $expectedFunctions
+                        Assert-LoadedFunctions $expectedFunctions | Should be $true
                     }
                 }
             }
         }
-    ).ToString().Replace('./relative/path/to/', $Resources.FullName + [IO.Path]::DirectorySeparatorChar).Replace('script_File', (Get-Random -InputObject $testFiles.Where({ $_.Extension -eq '.psm1' }).BaseName))
+    ).ToString().Replace(
+        './relative/path/to/',
+        $resRlPath + [IO.Path]::DirectorySeparatorChar
+    ).Replace(
+        'script_File', (Get-Random -InputObject $testFiles.Where({ $_.Extension -eq '.psm1' }).BaseName)
+    ).Replace(
+        'fileNamedlikeabc', ($scriptNames.substring(0, 9) | Group-Object -NoElement | Sort-Object Count)[-1].Name
+    ).Replace(
+        "./repo", $resRlPath
+    ).Replace(
+        "funcName1', 'funcName2",
+        [string]::Join("', '", (Get-Random -InputObject $scriptNames -Count 2))
+    )
     [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt 12) { $_.Substring(13) } }), [System.Text.Encoding]::UTF8)
     [System.IO.DirectoryInfo]::new([IO.Path]::Combine($PSScriptRoot, 'Public')).GetFiles().ForEach({
             $n = [IO.Path]::GetFileNameWithoutExtension($_.FullName)
@@ -228,5 +226,4 @@ end {
             }
         )
     }
-    Write-Host $fnNames
 }
