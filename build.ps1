@@ -354,14 +354,11 @@ Begin {
         }
     )
     $script:PSake_Build = [ScriptBlock]::Create({
-            $DePendencies = @(
+            @(
                 "Psake"
                 "Pester"
                 "PSScriptAnalyzer"
-            )
-            foreach ($ModuleName in $DePendencies) {
-                $ModuleName | Resolve-Module @update -Verbose
-            }
+            ) | Resolve-Module -UpdateModules -Verbose
             Write-BuildLog "Module Requirements Successfully resolved."
             $null = Set-Content -Path $Psake_BuildFile -Value $PSake_ScriptBlock
 
@@ -545,26 +542,6 @@ Begin {
         }
         "$elapse_msg{0}" -f (' ' * (30 - $elapse_msg.Length))
     }
-    function Get-LatestModuleVersion($Name) {
-        # access the main module page, and add a random number to trick proxies
-        $url = "https://www.powershellgallery.com/packages/$Name/?dummy=$(Get-Random)"
-        $request = [System.Net.WebRequest]::Create($url)
-        # do not allow to redirect. The result is a "MovedPermanently"
-        $request.AllowAutoRedirect = $false
-        try {
-            # send the request
-            $response = $request.GetResponse()
-            # get back the URL of the true destination page, and split off the version
-            $response.GetResponseHeader("Location").Split("/")[-1] -as [Version]
-            # make sure to clean up
-            $response.Close()
-            $response.Dispose()
-        } catch [System.Net.WebException] {
-            throw 'Operation is not valid, Please check your Internet.'
-        } catch {
-            Write-Warning $_.Exception.Message
-        }
-    }
     function Install-PsGalleryModule {
         # .SYNOPSIS
         # Installs a PowerShell module even on systems that don't have a working PowerShellGet.
@@ -670,41 +647,49 @@ Begin {
             }
         }
     }
-    <#
-        Begin {
-            $PSDefaultParameterValues = @{
-                '*-Module:Verbose'            = $false
-                'Import-Module:ErrorAction'   = 'Stop'
-                'Import-Module:Force'         = $true
-                'Import-Module:Verbose'       = $false
-                'Install-Module:AllowClobber' = $true
-                'Install-Module:ErrorAction'  = 'Stop'
-                'Install-Module:Force'        = $true
-                'Install-Module:Scope'        = 'CurrentUser'
-                'Install-Module:Verbose'      = $false
-            }
-        }
-    #>
     function Resolve-Module {
         [CmdletBinding()]
         param (
-            [Parameter(Mandatory, ValueFromPipeline)]
+            [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
             [Alias('Name')]
             [string[]]$Names,
-
             [switch]$UpdateModules
         )
+        begin {
+            $Get_LatestModuleVersion = [scriptblock]::Create({
+                    param($Name)
+                    # access the main module page, and add a random number to trick proxies
+                    $url = "https://www.powershellgallery.com/packages/$Name/?dummy=$(Get-Random)"
+                    $request = [System.Net.WebRequest]::Create($url)
+                    # do not allow to redirect. The result is a "MovedPermanently"
+                    $version = $null; $request.AllowAutoRedirect = $false
+                    try {
+                        # [todo] should be a retriable command.
+                        # send the request
+                        $response = $request.GetResponse()
+                        # get back the URL of the true destination page, and split off the version
+                        $version = $response.GetResponseHeader("Location").Split("/")[-1] -as [Version]
+                        # make sure to clean up
+                        $response.Close()
+                        $response.Dispose()
+                    } catch [System.Net.WebException] {
+                        throw 'WebException, Please check your Internet.'
+                    } catch {
+                        Write-Warning $_.Exception.Message
+                    }
+                    return $version
+                }
+            )
+        }
 
         process {
             foreach ($moduleName in $Names) {
                 Write-Host "Resolving Module [$moduleName]" -ForegroundColor Magenta
-
                 $module = Get-Module -Name $moduleName -ListAvailable -ErrorAction SilentlyContinue
                 if ($module) {
                     # Determine latest version on PSGallery and warn us if we're out of date
                     $latestLocalVersion = ($module | Measure-Object -Property Version -Maximum).Maximum
-                    $latestGalleryVersion = Get-LatestModuleVersion $moduleName # [todo] should be a retriable command.
-
+                    $latestGalleryVersion = $Get_LatestModuleVersion.Invoke($moduleName)
                     if (!$latestGalleryVersion) {
                         Write-Warning "Unable to find module $moduleName. Check your internet connection."
                     } elseif ($latestLocalVersion -lt $latestGalleryVersion -and $UpdateModules.IsPresent) {
@@ -714,16 +699,17 @@ Begin {
                 } else {
                     Write-Verbose -Message "[$moduleName] missing. Installing..."
                     $ModulePsd1 = Install-PsGalleryModule -Name $moduleName -PassThru
-                    $versionToImport = (Get-Module -Name $moduleName -ListAvailable | Measure-Object -Property Version -Maximum).Maximum
                 }
-
+                $versionToImport = (Get-Module -Name $moduleName -ListAvailable | Measure-Object -Property Version -Maximum).Maximum
                 Write-Verbose -Message "Importing module $moduleName."
                 if ($ModulePsd1) {
                     Import-Module $ModulePsd1.FullName
-                } elseif (![string]::IsNullOrEmpty($versionToImport)) {
-                    Import-Module $moduleName -RequiredVersion $versionToImport
                 } else {
-                    Import-Module $moduleName
+                    if (![string]::IsNullOrEmpty($versionToImport)) {
+                        Import-Module $moduleName -RequiredVersion $versionToImport
+                    } else {
+                        Import-Module $moduleName
+                    }
                 }
             }
         }
