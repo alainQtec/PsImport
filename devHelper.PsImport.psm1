@@ -220,9 +220,9 @@ if ($PrivateModules.Count -gt 0) {
     }
 }
 # Dot source the files
-foreach ($Import in ($Public + $Private)) {
+foreach ($file in ($Public, $Private)) {
     Try {
-        . $Import.fullname
+        . $file.fullname
     } Catch {
         Write-Warning "Failed to import function $($Import.BaseName): $_"
         $host.UI.WriteErrorLine($_)
@@ -230,4 +230,4 @@ foreach ($Import in ($Public + $Private)) {
 }
 # Export Public Functions
 $Public | ForEach-Object { Export-ModuleMember -Function $_.BaseName }
-#Export-ModuleMember -Alias @('<Aliases>')
+Export-ModuleMember -Alias @('Import')
