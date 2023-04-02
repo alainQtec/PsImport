@@ -656,30 +656,30 @@ Begin {
             [switch]$UpdateModules
         )
         begin {
-            $Get_LatestModuleVersion = [scriptblock]::Create({
-                    param($Name)
-                    # access the main module page, and add a random number to trick proxies
-                    $url = "https://www.powershellgallery.com/packages/$Name/?dummy=$(Get-Random)"
-                    $request = [System.Net.WebRequest]::Create($url)
-                    # do not allow to redirect. The result is a "MovedPermanently"
-                    $version = $null; $request.AllowAutoRedirect = $false
-                    try {
-                        # [todo] should be a retriable command.
-                        # send the request
-                        $response = $request.GetResponse()
-                        # get back the URL of the true destination page, and split off the version
-                        $version = $response.GetResponseHeader("Location").Split("/")[-1] -as [Version]
-                        # make sure to clean up
-                        $response.Close()
-                        $response.Dispose()
-                    } catch [System.Net.WebException] {
-                        throw 'WebException, Please check your Internet.'
-                    } catch {
-                        Write-Warning $_.Exception.Message
-                    }
-                    return $version
+            function private:Get-LatestModuleVersion {
+                [CmdletBinding()][OutputType([version])]
+                param ([Parameter(Mandatory)][string]$Name)
+                # access the main module page, and add a random number to trick proxies
+                $url = "https://www.powershellgallery.com/packages/$Name/?dummy=$(Get-Random)"
+                $request = [System.Net.WebRequest]::Create($url)
+                # do not allow to redirect. The result is a "MovedPermanently"
+                $version = [version]::new(); $request.AllowAutoRedirect = $false
+                try {
+                    # [todo] should be a retriable command.
+                    # send the request
+                    $response = $request.GetResponse()
+                    # get back the URL of the true destination page, and split off the version
+                    $version = $response.GetResponseHeader("Location").Split("/")[-1] -as [Version]
+                    # make sure to clean up
+                    $response.Close()
+                    $response.Dispose()
+                } catch [System.Net.WebException] {
+                    throw 'WebException, Please check your Internet.'
+                } catch {
+                    Write-Warning $_.Exception.Message
                 }
-            )
+                return [version]$version
+            }
         }
 
         process {
@@ -688,8 +688,8 @@ Begin {
                 $module = Get-Module -Name $moduleName -ListAvailable -ErrorAction SilentlyContinue
                 if ($module) {
                     # Determine latest version on PSGallery and warn us if we're out of date
-                    $latestLocalVersion = ($module | Measure-Object -Property Version -Maximum).Maximum
-                    $latestGalleryVersion = $Get_LatestModuleVersion.Invoke($moduleName)
+                    $latestLocalVersion = ($module | Measure-Object -Property Version -Maximum).Maximum -as [version]
+                    $latestGalleryVersion = Get-LatestModuleVersion -Name $moduleName
                     if (!$latestGalleryVersion) {
                         Write-Warning "Unable to find module $moduleName. Check your internet connection."
                     } elseif ($latestLocalVersion -lt $latestGalleryVersion -and $UpdateModules.IsPresent) {
