@@ -571,6 +571,7 @@ Begin {
         # .DESCRIPTION
         # For some reason Install-Module fails on Arch. This is a manual workaround to narrow down the sourse of errors.
         [CmdletBinding()]
+        [OutputType([IO.FileInfo])]
         param (
             [Parameter(Mandatory = $true)]
             [ValidateScript({ $_ -match '^[a-zA-Z0-9_.-]+$' })]
@@ -664,18 +665,12 @@ Begin {
 
         end {
             Write-Host " Done." -ForegroundColor Green
-            if ($Passthru.IsPresent) { Write-Output ([IO.FileInfo]::new([IO.Path]::Combine($Module_Path, "$moduleName.psd1"))) }
+            if ($Passthru.IsPresent) {
+                return [IO.FileInfo]::new([IO.Path]::Combine($Module_Path, "$moduleName.psd1"))
+            }
         }
     }
-    function Resolve-Module {
-        [Cmdletbinding()]
-        param (
-            [Parameter(Mandatory, ValueFromPipeline)]
-            [Alias('Name')]
-            [string[]]$Names,
-
-            [switch]$UpdateModules
-        )
+    <#
         Begin {
             $PSDefaultParameterValues = @{
                 '*-Module:Verbose'            = $false
@@ -689,56 +684,46 @@ Begin {
                 'Install-Module:Verbose'      = $false
             }
         }
+    #>
+    function Resolve-Module {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory, ValueFromPipeline)]
+            [Alias('Name')]
+            [string[]]$Names,
+
+            [switch]$UpdateModules
+        )
+
         process {
             foreach ($moduleName in $Names) {
-                $versionToImport = [string]::Empty; $Psd1 = ''
-                Write-Host "##[command] Resolving Module [$moduleName]" -ForegroundColor Magenta
-                $Module = Get-Module -Name $moduleName -ListAvailable -Verbose:$false -ErrorAction SilentlyContinue
-                if ($null -ne $Module) {
+                Write-Host "Resolving Module [$moduleName]" -ForegroundColor Magenta
+
+                $module = Get-Module -Name $moduleName -ListAvailable -ErrorAction SilentlyContinue
+                if ($module) {
                     # Determine latest version on PSGallery and warn us if we're out of date
-                    $latestLocalVersion = ($Module | Measure-Object -Property Version -Maximum).Maximum
-                    $versionToImport = $latestLocalVersion
+                    $latestLocalVersion = ($module | Measure-Object -Property Version -Maximum).Maximum
                     $latestGalleryVersion = Get-LatestModuleVersion $moduleName # [todo] should be a retriable command.
-                    if ($null -eq $latestGalleryVersion) {
-                        Write-Warning "Unable to Find Module $moduleName. Check your Internet."
-                    }
-                    if ($null -eq (Get-Module -Name Psake -ListAvailable -ErrorAction SilentlyContinue)) {
-                        Install-Module -Name Psake -Force -Verbose -Scope CurrentUser;
-                    }
-                    # Are we out of date?
-                    if ($latestLocalVersion -lt $latestGalleryVersion) {
-                        if ($UpdateModules) {
-                            Write-Verbose -Message "$($moduleName) installed version [$($latestLocalVersion.ToString())] is outdated. Installing gallery version [$($latestGalleryVersion.ToString())]"
-                            if ($UpdateModules) {
-                                try {
-                                    Install-Module -Name $moduleName -RequiredVersion $latestGalleryVersion
-                                } catch {
-                                    Install-PsGalleryModule -Name $moduleName
-                                }
-                                $versionToImport = $latestGalleryVersion
-                            }
-                        } else {
-                            Write-Warning "$($moduleName) is out of date. Latest version on PSGallery is [$latestGalleryVersion]. To update, use the -UpdateModules switch."
-                        }
+
+                    if (!$latestGalleryVersion) {
+                        Write-Warning "Unable to find module $moduleName. Check your internet connection."
+                    } elseif ($latestLocalVersion -lt $latestGalleryVersion -and $UpdateModules.IsPresent) {
+                        Write-Verbose -Message "$moduleName installed version [$latestLocalVersion] is outdated. Installing gallery version [$latestGalleryVersion]."
+                        Install-PsGalleryModule -Name $moduleName -Version $latestGalleryVersion
                     }
                 } else {
-                    Write-Verbose -Message "[$($moduleName)] missing. Installing..."
-                    try {
-                        Install-Module -Name $moduleName
-                    } catch {
-                        $Psd1 = Install-PsGalleryModule -Name $moduleName -Passthru
-                    }
+                    Write-Verbose -Message "[$moduleName] missing. Installing..."
+                    $ModulePsd1 = Install-PsGalleryModule -Name $moduleName -PassThru
                     $versionToImport = (Get-Module -Name $moduleName -ListAvailable | Measure-Object -Property Version -Maximum).Maximum
                 }
-                Write-Verbose -Message "$($moduleName) was installed Succesfully. Now Importing..."
-                if ($null -eq $Psd1) {
-                    if (![string]::IsNullOrEmpty($versionToImport)) {
-                        Import-Module $moduleName -RequiredVersion $versionToImport
-                    } else {
-                        Import-Module $moduleName
-                    }
+
+                Write-Verbose -Message "Importing module $moduleName."
+                if ($ModulePsd1) {
+                    Import-Module $ModulePsd1.FullName
+                } elseif (![string]::IsNullOrEmpty($versionToImport)) {
+                    Import-Module $moduleName -RequiredVersion $versionToImport
                 } else {
-                    Import-Module $Psd1.FullName
+                    Import-Module $moduleName
                 }
             }
         }
