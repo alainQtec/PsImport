@@ -401,7 +401,8 @@ FodyWeavers.xsd
 # dotEnv
 .env
 
-# Generated test Files:
+# Generated files:
+BuildOutput/
 Tests/results.xml
 Tests/Resources/
 Tests/devHelper.PsImport.Module.Tests.ps1
