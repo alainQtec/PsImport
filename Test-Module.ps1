@@ -14,6 +14,7 @@ param (
     [switch]$CleanUp
 )
 begin {
+    $testResults = $null
     $BuildOutDir = [IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput'))
     $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
     # if (![IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1")).Exists) { throw [System.IO.FileNotFoundException]::New('Module manifest file Was not Found!') }
@@ -209,7 +210,7 @@ process {
         }
         Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
     }
-    Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml"
+    $testResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
 }
 
 end {
@@ -226,4 +227,5 @@ end {
             }
         )
     }
+    return $testResults
 }
