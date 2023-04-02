@@ -78,7 +78,7 @@ process {
                 Context "When importing functions with a wildcard in the filename" {
                     It "should import all functions matching the pattern from file" {
                         # Arrange
-                        $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+(\w+)" | ForEach-Object { $_.Matches.Groups[1].Value })
+                        $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
 
                         # Act
                         Import * -from "./relative/path/to/script_File.psm1"
@@ -95,7 +95,7 @@ process {
                 Context "When importing functions from multiple files" {
                     It "should import all functions from all files" {
                         # Arrange
-                        $expectedFunctions = @(Get-Content "./relative/path/to/fileNamedlikeabc*.ps1" | Select-String -Pattern "^function\s+(\w+)" | ForEach-Object { $_.Matches.Groups[1].Value })
+                        $expectedFunctions = @(Get-Content "./relative/path/to/fileNamedlikeabc*.ps1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
                         # Act
                         Import * -from "./relative/path/to/fileNamedlikeabc*.ps1"
 
