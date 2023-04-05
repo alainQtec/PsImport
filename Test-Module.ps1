@@ -16,6 +16,14 @@ param (
 begin {
     $testResults = $null
     $BuildOutDir = [IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput'))
+    if (!$BuildOutDir.Exists) {
+        $msg = 'Directory "{0}" Not Found' -f ([IO.Path]::GetRelativePath($PSScriptRoot, $BuildOutDir.FullName))
+        if ($skipBuildOutputTest.IsPresent) {
+            Write-Warning "$msg"
+        } else {
+            throw [System.IO.DirectoryNotFoundException]::New($msg)
+        }
+    }
     $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
     # if (![IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1")).Exists) { throw [System.IO.FileNotFoundException]::New('Module manifest file Was not Found!') }
     $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine($TestsPath, 'Resources'))
@@ -188,20 +196,9 @@ process {
                 }
             )
             [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Tostring().Split("`r").ForEach({ if ($_.Length -gt 20) { $_.Substring(21) } }), [System.Text.Encoding]::UTF8)
-        } else {
-            if ($skipBuildOutputTest.IsPresent) {
-                Write-Warning "Build OutPut is incomplete, moving on .."
-            } else {
-                throw 'Build is not Complete!'
-            }
         }
     } else {
         Remove-Item $mtTestsPath -Force
-        if ($skipBuildOutputTest.IsPresent) {
-            Write-Warning "No Build OutPut, moving on .."
-        } else {
-            throw 'No Build OutPut!'
-        }
     }
     Write-Host "[+] Running tests ..." -ForegroundColor Green
     if (!$skipBuildOutputTest.IsPresent) {
