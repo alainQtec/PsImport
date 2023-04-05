@@ -1,8 +1,9 @@
 ﻿<#
 .SYNOPSIS
     Run Tests
-.NOTES
-    It is not included in the module.
+.EXAMPLE
+    .\Test-Module.ps1 -version 0.1.0
+    Will test the module in .\BuildOutput\devHelper.PsImport\0.1.0\
 #>
 param (
     [Parameter(Mandatory = $false, Position = 0)]
@@ -10,12 +11,22 @@ param (
     # Path Containing Tests
     [Parameter(Mandatory = $false, Position = 1)]
     [Alias('Tests')][string]$TestsPath = [IO.Path]::Combine($PSScriptRoot, 'Tests'),
+    [Parameter(Mandatory = $true, Position = 2)]
+    [ValidateScript({
+            if (($_ -as 'version') -is [version]) {
+                return $true
+            } else {
+                throw [System.IO.InvalidDataException]::New('Please Provide a valid version')
+            }
+        }
+    )]
+    [string]$version,
     [switch]$skipBuildOutputTest,
     [switch]$CleanUp
 )
 begin {
-    $testResults = $null
-    $BuildOutDir = [IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput'))
+    $TestResults = $null
+    $BuildOutDir = [IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'devHelper.PsImport', $version))
     if (!$BuildOutDir.Exists) {
         $msg = 'Directory "{0}" Not Found' -f ([IO.Path]::GetRelativePath($PSScriptRoot, $BuildOutDir.FullName))
         if ($skipBuildOutputTest.IsPresent) {
@@ -25,7 +36,7 @@ begin {
         }
     }
     $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
-    # if (![IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1")).Exists) { throw [System.IO.FileNotFoundException]::New('Module manifest file Was not Found!') }
+    if (![IO.Path]::Exists([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1"))) { throw [System.IO.FileNotFoundException]::New("Module manifest file Was not Found in '$($BuildOutDir.FullName)'.") }
     $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine($TestsPath, 'Resources'))
     $resRlPath = [IO.Path]::GetRelativePath($PSScriptRoot, $Resources.FullName)
     $script:fnNames = [System.Collections.Generic.List[string]]::New(); $testFiles = [System.Collections.Generic.List[IO.FileInfo]]::New()
@@ -50,10 +61,22 @@ begin {
             Write-Output $result
         }
     )
+    function Assert-LoadedFunctions {
+        param ([Parameter(Mandatory)][string[]]$Names)
+        $f = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
+        $s = $true; $Names.ForEach({ $s = $s -and $f.Contains($_) })
+        return $s
+    }
 }
 
 process {
-    # Import-Module $manifestFile
+    if ($null -eq (Get-Module devHelper.PsImport)) {
+        if ($version) {
+            Import-Module (Split-Path $BuildOutDir.FullName) -Version $version
+        } else {
+            Import-Module (Split-Path $BuildOutDir.FullName)
+        }
+    }
     Write-Host "[+] Generating test files ..." -ForegroundColor Green
     $testFiles | ForEach-Object {
         if ($_.Exists) { Remove-Item -Path $_.FullName -Force };
@@ -84,12 +107,6 @@ process {
     $mtTestsPath = $testFiles.Where({ $_.BaseName -eq 'devHelper.PsImport.Module.Tests' }).FullName
     $scriptNames = $testFiles.Where({ $_.Extension -eq '.ps1' -and $_.BaseName.Contains('-') }).BaseName
     $ftTestScrpt = [scriptblock]::Create({
-            function Assert-LoadedFunctions {
-                param ([Parameter(Mandatory)][string[]]$Names)
-                $f = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
-                $s = $true; $Names.ForEach({ $s = $s -and $f.Contains($_) })
-                return $s
-            }
             #1. Test feature: Support for wildcards
             Describe "Importing functions with wildcards" {
                 Context "When importing functions with a wildcard in the filename" {
@@ -207,7 +224,7 @@ process {
         }
         Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
     }
-    $testResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
+    $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
 }
 
 end {
@@ -224,5 +241,5 @@ end {
             }
         )
     }
-    return $testResults
+    return $TestResults
 }
