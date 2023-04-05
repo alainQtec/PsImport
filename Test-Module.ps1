@@ -11,7 +11,9 @@ param (
     # Path Containing Tests
     [Parameter(Mandatory = $false, Position = 1)]
     [Alias('Tests')][string]$TestsPath = [IO.Path]::Combine($PSScriptRoot, 'Tests'),
-    [Parameter(Mandatory = $true, Position = 2)]
+
+    # Version string
+    [Parameter(Mandatory = $false, Position = 2)]
     [ValidateScript({
             if (($_ -as 'version') -is [version]) {
                 return $true
@@ -74,7 +76,7 @@ process {
         if ($version) {
             Import-Module (Split-Path $BuildOutDir.FullName) -Version $version
         } else {
-            Import-Module (Split-Path $BuildOutDir.FullName)
+            Import-Module $BuildOutDir.FullName
         }
     }
     Write-Host "[+] Generating test files ..." -ForegroundColor Green
