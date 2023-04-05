@@ -43,6 +43,13 @@ Class PsImport {
         # Validate paths and select only those which can be resolved
         $_FilePaths = @(); foreach ($path in $FilePaths) {
             if ([string]::IsNullOrWhiteSpace($Path)) { continue };
+            if ($path -as 'uri' -is [uri]) {
+                Write-Debug 'Its a uri!! ' -Debug
+                $uri = [uri]::New($path); $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
+                [void][PsImport]::DownloadFile($uri, $outFile.FullName);
+                $_FilePaths += $outFile.FullName;
+                continue
+            }
             $_FilePaths += Resolve-FilePath -Path $path -throwOnFailure:$throwOnFailure -NoAmbiguous
         }
         if ($FnName -ne "*") {
@@ -106,6 +113,90 @@ Class PsImport {
         }
         $FnDetails | ForEach-Object { [void][PsImport]::Record($_) }
         return $FnDetails
+    }
+    static [void] DownloadFile([string]$url, [string]$outFile) {
+        $Name = Split-Path $url -Leaf; Write-Verbose "Downloading $Name to $Outfile ... "
+        if ([double][string]::Join('.', [System.Environment]::Version.Major, [System.Environment]::Version.Minor) -ge [double]'4.5') {
+            # since System.Net.Http.HttpCompletionOption enumeration is not available in .NET Framework versions prior to 4.5
+            # &yes this is faster than iwr and WebClient, so u better off update your dotnet versions.
+            $client = New-Object System.Net.Http.HttpClient
+            $client.DefaultRequestHeaders.Add("x-ms-download-header-content-disposition", "attachment")
+            $client.DefaultRequestHeaders.Add("x-ms-download-content-type", "application/octet-stream")
+            $client.DefaultRequestHeaders.Add("x-ms-download-length", "0")
+            $client.DefaultRequestHeaders.Add("x-ms-download-id", [Guid]::NewGuid().ToString())
+            $progressTracker = New-Object System.Net.Http.Handlers.ProgressMessageHandler
+            $progressTracker.HttpSendProgress += {
+                param($e)
+                $percentComplete = [int]($e.ProgressPercentage * 100)
+                Write-Progress -Activity "Downloading $name from: $url" -Status "Progress: $percentComplete%" -PercentComplete $percentComplete
+            }
+            # Download the file and save it to a Stream
+            $response = $client.GetAsync($url, ('ResponseHeadersRead' -as 'System.Net.Http.HttpCompletionOption'), $progressTracker).Result
+            $stream = $response.Content.ReadAsStreamAsync().Result
+
+            # Create a FileStream object to write the data to the file
+            $fileStream = New-Object System.IO.FileStream($outFile, [System.IO.FileMode]::Create)
+
+            # Copy the data from the Stream to the FileStream
+            $stream.CopyTo($fileStream)
+
+            # Close the Stream and FileStream
+            $stream.Close()
+            $fileStream.Close()
+        } else {
+            $stream = $null; $fileStream = $null
+            try {
+                # Create a new HttpWebRequest object
+                $request = [System.Net.HttpWebRequest]::Create($url)
+
+                # Set the user agent to a non-empty value to avoid a 403 Forbidden error
+                $request.UserAgent = "Mozilla/5.0"
+
+                # Get the response from the server
+                $response = $request.GetResponse()
+
+                # Get the length of the content
+                $contentLength = $response.ContentLength
+
+                # Get the stream containing the content from the response
+                $stream = $response.GetResponseStream()
+
+                # Create a buffer to hold the data
+                $buffer = New-Object byte[] 1024
+
+                # Create a FileStream object to write the data to the file
+                $fileStream = [System.IO.FileStream]::new($outFile, [System.IO.FileMode]::Create)
+
+                # Initialize the total bytes received and the total bytes to receive
+                $totalBytesReceived = 0
+                $totalBytesToReceive = $contentLength
+
+                # Display a progress bar
+                while ($totalBytesToReceive -gt 0) {
+                    # Read the data from the stream
+                    $bytesRead = $stream.Read($buffer, 0, 1024)
+                    $totalBytesReceived += $bytesRead
+                    $totalBytesToReceive -= $bytesRead
+
+                    # Write the data to the file
+                    $fileStream.Write($buffer, 0, $bytesRead)
+
+                    # Update the progress bar
+                    $percentComplete = [int]($totalBytesReceived / $contentLength * 100)
+                    Write-Progress -Activity "Downloading $Name from: $url" -Status "Progress: $percentComplete%" -PercentComplete $percentComplete
+                }
+            } catch {
+                throw $_
+            } finally {
+                # Close the Stream and FileStream
+                Invoke-Command -ScriptBlock { $stream.Close(); $fileStream.Close() } -ErrorAction SilentlyContinue
+                if ([IO.File]::Exists("$Name.zip")) {
+                    Write-Host "Download complete!" -ForegroundColor Green
+                } else {
+                    Write-Host "Download Failed!" -ForegroundColor Red
+                }
+            }
+        }
     }
     static hidden [string[]] GetCommandSources() {
         [string[]]$availableSources = @(Get-Command -CommandType Function | Select-Object Source -Unique).Source | Where-Object { $_.Length -gt 0 }
