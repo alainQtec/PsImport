@@ -806,7 +806,7 @@ Begin {
         )
         $FullVal = $Value -join " "
         Write-BuildLog "Setting env variable '$Name' to '$fullVal'"
-        Set-Item -Path Env:\$Name -Value $FullVal -Force
+        Set-Item -Path ([IO.Path]::Combine('Env:', $Name)) -Value $FullVal -Force
     }
     function Invoke-CommandWithLog {
         [CmdletBinding()]
@@ -814,8 +814,7 @@ Begin {
             [parameter(Mandatory, Position = 0)]
             [ScriptBlock]$ScriptBlock
         )
-        Write-BuildLog -Command ($ScriptBlock.ToString() -join "`n")
-        $ScriptBlock.Invoke()
+        Write-BuildLog -Command ($ScriptBlock.ToString() -join "`n"); $ScriptBlock.Invoke()
     }
     function Write-Heading {
         param(
