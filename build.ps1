@@ -179,10 +179,10 @@ Begin {
                 Import-Module $outputModDir -Force -Verbose:$false
                 $test_Script = [IO.FileInfo]::New('Test-Module.ps1')
                 if (!$test_Script.Exists) { throw [System.IO.FileNotFoundException]::New($test_Script.FullName) }
-                $testResults = & $test_Script
+                $TestResults = & $test_Script
                 '    Pester invocation complete!'
-                if ($testResults.FailedCount -gt 0) {
-                    $testResults | Format-List
+                if ($TestResults.FailedCount -gt 0) {
+                    $TestResults | Format-List
                     Write-Error -Message 'One or more Pester tests failed. Build cannot continue!'
                 }
                 Pop-Location
