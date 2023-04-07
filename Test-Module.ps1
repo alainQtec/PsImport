@@ -4,6 +4,9 @@
 .EXAMPLE
     .\Test-Module.ps1 -version 0.1.0
     Will test the module in .\BuildOutput\devHelper.PsImport\0.1.0\
+.EXAMPLE
+    .\Test-Module.ps1
+    Will test the latest  module version in .\BuildOutput\devHelper.PsImport\
 #>
 param (
     [Parameter(Mandatory = $false, Position = 0)]
@@ -28,7 +31,13 @@ param (
 )
 begin {
     $TestResults = $null
-    $BuildOutDir = [IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'devHelper.PsImport', $version))
+    # Get latest version
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        $version = [version[]][IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'devHelper.PsImport')).GetDirectories().Name | Select-Object -Last 1
+    }
+    $BuildOutDir = [IO.DirectoryInfo]::New((Resolve-Path ([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'devHelper.PsImport', $version)) -ErrorAction Stop))
+    $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
+    Write-Host "[+] Checking Prerequisites ..." -ForegroundColor Green
     if (!$BuildOutDir.Exists) {
         $msg = 'Directory "{0}" Not Found' -f ([IO.Path]::GetRelativePath($PSScriptRoot, $BuildOutDir.FullName))
         if ($skipBuildOutputTest.IsPresent) {
@@ -37,7 +46,9 @@ begin {
             throw [System.IO.DirectoryNotFoundException]::New($msg)
         }
     }
-    $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
+    if (!$skipBuildOutputTest.IsPresent -and !$manifestFile.Exists) {
+        throw [System.IO.FileNotFoundException]::New("Could Not Find Module manifest File $([IO.Path]::GetRelativePath($PSScriptRoot, $manifestFile.FullName))")
+    }
     if (![IO.Path]::Exists([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1"))) { throw [System.IO.FileNotFoundException]::New("Module manifest file Was not Found in '$($BuildOutDir.FullName)'.") }
     $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine($TestsPath, 'Resources'))
     $resRlPath = [IO.Path]::GetRelativePath($PSScriptRoot, $Resources.FullName)
@@ -221,9 +232,6 @@ process {
     }
     Write-Host "[+] Running tests ..." -ForegroundColor Green
     if (!$skipBuildOutputTest.IsPresent) {
-        if (!$manifestFile.Exists) {
-            throw [System.IO.FileNotFoundException]::New("Could Not Find Module manifest File $([IO.Path]::GetRelativePath($PSScriptRoot, $manifestFile.FullName))")
-        }
         Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
     }
     $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
