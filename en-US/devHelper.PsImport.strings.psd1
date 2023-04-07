@@ -17,7 +17,7 @@
     > _You can view the paths listed by running the environment variable ```$Env:PSModulePath``_
 5. Import the module, using the full path to the PSD1 file in place of ``devHelper.PsImport`` if the unzipped module folder is not in your ``PSModulePath``:
     ``````powershell
-    # In `$Env:PSModulePath
+    # In Env:PSModulePath
     Import-Module devHelper.PsImport
 
     # Otherwise, provide the path to the manifest:
