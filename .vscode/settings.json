@@ -1,0 +1,8 @@
+// Use vscode extension [Peep](https://marketplace.visualstudio.com/items?itemName=nwallace.peep#review-details), which allows you to toggle hide on the excluded files in your projects settings.json.
+// Workspace settings:
+{
+    "files.exclude": {
+        "Tests/Resources/Test-GitHubScript.ps1": true,
+        "**/._*": true // Files that start with ._ such as ._.DS_Store files found on OSX
+    }
+}
