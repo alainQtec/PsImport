@@ -43,9 +43,8 @@ Class PsImport {
         # Validate paths and select only those which can be resolved
         $_FilePaths = @(); foreach ($path in $FilePaths) {
             if ([string]::IsNullOrWhiteSpace($Path)) { continue };
-            $url = $path -as 'uri'
-            if ($url -is [uri]) {
-                $uri = [uri]::New($url)
+            $uri = $path -as 'Uri'
+            if ($uri -is [Uri]) {
                 if ($uri.Scheme -notin ("file", "https")) { throw [System.IO.InvalidDataException]::New("Input URL is not a valid file or HTTPS URL.") }
                 if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                     $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
