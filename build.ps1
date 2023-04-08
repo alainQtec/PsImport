@@ -1142,11 +1142,13 @@ Process {
             Write-Heading "CleanUp: Uninstall the test module, and delete the LocalPSRepo"
             if ($Task -notcontains 'Import') {
                 Uninstall-Module $ModuleName
-                Unregister-PSRepository 'LocalPSRepo'
             }
-            $Local_PSRepo = [IO.Path]::Combine($Env:USERPROFILE, 'LocalPSRepo')
-            if (Test-Path $Local_PSRepo -PathType Container -ErrorAction SilentlyContinue) {
+            $Local_PSRepo = [IO.DirectoryInfo]::new([IO.Path]::Combine($Env:USERPROFILE, 'LocalPSRepo'))
+            if ($Local_PSRepo.Exists) {
                 Remove-Item "$Local_PSRepo" -Force -Recurse
+                if ($null -ne (Get-PSRepository -Name 'LocalPSRepo' -ErrorAction Ignore)) {
+                    Unregister-PSRepository 'LocalPSRepo' -Verbose
+                }
             }
         }
         Write-EnvironmentSummary "Build finished"
