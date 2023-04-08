@@ -129,7 +129,6 @@ process {
                     }
                 }
             }
-
             #2. Test feature: Importing from many files at once
             Describe "Importing functions from multiple files" {
                 Context "When importing functions from multiple files" {
@@ -239,11 +238,10 @@ process {
 end {
     if ($CleanUp.IsPresent) {
         Write-Host "[+] Clean Up ..." -ForegroundColor Green
-        $Resources.GetFiles().ForEach({
-                Remove-Item -Path $_.FullName -Force
-                Write-Host "    removed $($_.Name)" -ForegroundColor Gray
-            }
-        )
+        $Resources.GetFiles().Where({ $_.Name -ne 'Test-GitHubScript.ps1' }) | ForEach-Object {
+            Remove-Item -Path $_.FullName -Force
+            Write-Host "    removed $($_.Name)" -ForegroundColor Gray
+        }
         $testFiles.ForEach({
                 Remove-Item -Path $_.FullName -Force
                 Write-Host "    removed $($_.Name)" -ForegroundColor White
