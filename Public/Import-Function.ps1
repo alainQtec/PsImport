@@ -42,7 +42,7 @@
         # FilePath from which to import
         [Parameter(Position = 1, Mandatory = $true, ParameterSetName = '__AllParameterSets')]
         [ValidateNotNullOrEmpty()]
-        [Alias('f', 'From')]
+        [Alias('f', "from")]
         [string[]]$path,
 
         # Minimum version of function to import
