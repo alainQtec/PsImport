@@ -125,7 +125,7 @@ process {
                     It "should import all functions matching the pattern from file" {
                         $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
                         Import * -from "./relative/path/to/script_File.psm1"
-                        Assert-LoadedFunctions $expectedFunctions | Should be $true
+                        Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
             }
@@ -136,7 +136,7 @@ process {
                     It "should import all functions from all files" {
                         $expectedFunctions = @(Get-Content "./relative/path/to/fileNamedlikeabc*.ps1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
                         Import * -from "./relative/path/to/fileNamedlikeabc*.ps1"
-                        Assert-LoadedFunctions $expectedFunctions | Should be $true
+                        Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
             }
@@ -146,7 +146,7 @@ process {
                     It "should import only the specified functions from the specified file" {
                         $expectedFunctions = @('funcName1', 'funcName2')
                         Import 'funcName1', 'funcName2' -from "./repo"
-                        Assert-LoadedFunctions $expectedFunctions | Should be $true
+                        Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
             }
@@ -156,7 +156,7 @@ process {
                     It "should import only the specified function from the remote script" {
                         $expectedFunctions = @('Test-GitHubScript')
                         Import Test-GitHubScript -from 'https://github.com/alainQtec/devHelper.PsImport/raw/main/Tests/Resources/Test-GitHubScript.ps1'
-                        Assert-LoadedFunctions $expectedFunctions | Should be $true
+                        Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
             }
@@ -204,13 +204,13 @@ process {
                         Context "Confirm files are valid Powershell syntax" {
                             $_scripts = $decomPath.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
                             $testCase = $_scripts | ForEach-Object { @{ file = $_ } }
-                            It "Script <file> should be valid Powershell" -TestCases $testCase {
+                            It "Script <file> Should -Be valid Powershell" -TestCases $testCase {
                                 param($file)
                                 $file.fullname | Should Exist
                                 $contents = Get-Content -Path $file.fullname -ErrorAction Stop
                                 $errors = $null
                                 $null = [System.Management.Automation.PSParser]::Tokenize($contents, [ref]$errors)
-                                $errors.Count | Should Be 0
+                                $errors.Count | Should -Be 0
                             }
                         }
                         Context "Confirm there are no duplicate function names in private and public folders" {

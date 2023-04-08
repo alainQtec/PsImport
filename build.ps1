@@ -643,7 +643,7 @@ Begin {
                 # do not allow to redirect. The result is a "MovedPermanently"
                 $version = [version]::new(); $request.AllowAutoRedirect = $false
                 try {
-                    # [todo] should be a retriable command.
+                    # [todo] Should -Be a retriable command.
                     # send the request
                     $response = $request.GetResponse()
                     # get back the URL of the true destination page, and split off the version
