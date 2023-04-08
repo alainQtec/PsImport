@@ -83,12 +83,11 @@ begin {
 }
 
 process {
-    if ($null -eq (Get-Module devHelper.PsImport)) {
-        if ($version) {
-            Import-Module (Split-Path $BuildOutDir.FullName) -Version $version
-        } else {
-            Import-Module $BuildOutDir.FullName
-        }
+    Get-Module devHelper.PsImport | Remove-Module
+    if ($version) {
+        Import-Module (Split-Path $BuildOutDir.FullName) -Version $version
+    } else {
+        Import-Module $BuildOutDir.FullName
     }
     Write-Host "[+] Generating test files ..." -ForegroundColor Green
     $testFiles | ForEach-Object {
