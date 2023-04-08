@@ -2,7 +2,7 @@ using namespace System.Management.Automation.Language
 #region    Classes
 Class PsImport {
     static [System.Collections.Generic.List[string]] $ExcludedNames
-    static [System.Collections.Generic.Dictionary[string, FunctionDetails]] $Functions # Dictionary of Functions that have already been parsed, so it won't have to do it over again (for performance reasons).
+    static [System.Collections.Generic.Dictionary[string, FunctionDetails]] $Functions # Dictionary of Functions that have already been parsed, so we won't have to do it over again (for performance reasons).
     static [FunctionDetails[]] GetFunction([string]$FnName) { return [PsImport]::GetFunction($FnName, $false) }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath) { return [PsImport]::GetFunction($FnName, $FilePath, $false) }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths) { return [PsImport]::GetFunction($FnName, $FilePaths, $false) }
@@ -43,14 +43,19 @@ Class PsImport {
         # Validate paths and select only those which can be resolved
         $_FilePaths = @(); foreach ($path in $FilePaths) {
             if ([string]::IsNullOrWhiteSpace($Path)) { continue };
-            if ($path -as 'uri' -is [uri]) {
-                Write-Debug 'Its a uri!! ' -Debug
-                $uri = [uri]::New($path); $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
-                [void][PsImport]::DownloadFile($uri, $outFile.FullName);
-                $_FilePaths += $outFile.FullName;
-                continue
+            $url = $path -as 'uri'
+            if ($url -is [uri]) {
+                $uri = [uri]::New($url)
+                if ($uri.Scheme -notin ("file", "https")) { throw [System.IO.InvalidDataException]::New("Input URL is not a valid file or HTTPS URL.") }
+                if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
+                    $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
+                    [void][PsImport]::DownloadFile($uri, $outFile.FullName);
+                    $_FilePaths += $outFile.FullName; continue
+                }
+                $_FilePaths += Resolve-FilePath -Path $path -throwOnFailure:$throwOnFailure -NoAmbiguous
+            } else {
+                throw [System.InvalidOperationException]::New("Could not import from '$path'. Path is not a valid url")
             }
-            $_FilePaths += Resolve-FilePath -Path $path -throwOnFailure:$throwOnFailure -NoAmbiguous
         }
         if ($FnName -ne "*") {
             return [PsImport]::ParseFile($_FilePaths).Where({ $_.Name -in $FnName })
@@ -128,7 +133,7 @@ Class PsImport {
         [version]$dotNET_Framework_version = [string]::Join('.', [System.Environment]::Version.Major, [System.Environment]::Version.Minor)
         if ($dotNET_Framework_version -ge [version]'4.5') {
             # since System.Net.Http.HttpCompletionOption enumeration is not available in .NET Framework versions prior to 4.5
-            # &yes this is faster than iwr and WebClient, so u better off update your dotnet versions.
+            # &yes this is faster than iwr, so u better off update your dotnet versions.
             Write-Verbose "Downloading $Name to $Outfile ... " -Verbose
             $client = [System.Net.Http.HttpClient]::New()
             $client.DefaultRequestHeaders.Add("x-ms-download-header-content-disposition", "attachment")
@@ -147,7 +152,7 @@ Class PsImport {
             $fileStream.Close()
             Write-Verbose "Done." -Verbose
         } else {
-            Write-Debug "Using iwr" -Debug
+            Write-Debug "Using iwr :(" -Debug
             Invoke-WebRequest -Uri $uri -OutFile $outFile -Verbose:$false
         }
     }
