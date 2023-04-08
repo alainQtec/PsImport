@@ -155,7 +155,7 @@ process {
             Describe "Importing specific functions from a remote script" {
                 Context "When importing specific functions from a remote script" {
                     It "should import only the specified function from the remote script" {
-                        $expectedFunctions = @('funcName')
+                        $expectedFunctions = @('Test-GitHubScript')
                         Import Test-GitHubScript -from 'https://github.com/alainQtec/devHelper.PsImport/raw/main/Tests/Resources/Test-GitHubScript.ps1'
                         Assert-LoadedFunctions $expectedFunctions | Should be $true
                     }
