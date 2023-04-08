@@ -1,8 +1,38 @@
-// Use vscode extension [Peep](https://marketplace.visualstudio.com/items?itemName=nwallace.peep#review-details), which allows you to toggle hide on the excluded files in your projects settings.json.
-// Workspace settings:
 {
-    "files.exclude": {
+    "editor.formatOnSave": true,
+    "editor.autoIndent": "full",
+    "files.exclude": { // Use vscode extension [Peep](https://marketplace.visualstudio.com/items?itemName=nwallace.peep#review-details), which allows you to toggle hide on the excluded files in your projects settings.json.
         "Tests/Resources/Test-GitHubScript.ps1": true,
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
         "**/._*": true // Files that start with ._ such as ._.DS_Store files found on OSX
+    },
+    "powershell.pester.codeLens": false,
+    "powershell.integratedConsole.suppressStartupBanner": true,
+    "powershell.integratedConsole.showOnStartup": false,
+    "powershell.codeFormatting.autoCorrectAliases": true,
+    "powershell.codeFormatting.preset": "OTBS",
+    "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
+    "powershell.codeFormatting.useCorrectCasing": true,
+    "powershell.codeFormatting.newLineAfterCloseBrace": false,
+    "powershell.codeFormatting.pipelineIndentationStyle": "IncreaseIndentationForFirstPipeline",
+    "powershell.codeFormatting.alignPropertyValuePairs": true,
+    "powershell.codeFormatting.ignoreOneLineBlock": true,
+    "powershell.codeFormatting.newLineAfterOpenBrace": true,
+    "powershell.codeFormatting.openBraceOnSameLine": true,
+    "powershell.codeFormatting.whitespaceAfterSeparator": true,
+    "powershell.codeFormatting.whitespaceAroundOperator": true,
+    "powershell.codeFormatting.whitespaceBeforeOpenBrace": true,
+    "powershell.codeFormatting.whitespaceBeforeOpenParen": true,
+    "powershell.codeFormatting.whitespaceInsideBrace": true,
+    "powershell.codeFormatting.addWhitespaceAroundPipe": true,
+    "powershell.codeFormatting.whitespaceBetweenParameters": true,
+    "files.trimTrailingWhitespace": true,
+    "files.encoding": "utf8",
+    "[powershell]": {
+        "files.encoding": "utf8bom"
     }
 }
