@@ -34,14 +34,15 @@ Class PsImport {
         }
         return $res
     }
-    static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath, [bool]$throwOnFailure) {
-        [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string]$FilePath = $FilePath
-        [string[]]$FilePaths = @($FilePath)
-        if ([IO.DirectoryInfo]::new($FilePath).Attributes -eq 'Directory') { $FilePath = "{0}*" -f (Resolve-Path $FilePath) }
-        $FilePaths = @(Get-Item $FilePath | Where-Object { [string]$_.Attributes -ne 'Directory' } | Select-Object -ExpandProperty FullName)
+    static [FunctionDetails[]] GetFunction([string]$FnName, [string]$Path, [bool]$throwOnFailure) {
+        [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string]$Path = $Path
+        $Path_Info = [IO.DirectoryInfo]::new([IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location), "$Path")))
+        $FilePaths = @($Path); if ($Path_Info.Attributes -eq 'Directory') { $FilePaths = $Path_Info.GetFiles("*", [System.IO.SearchOption]::TopDirectoryOnly).Where({ $_.Extension -in ('.ps1', '.psm1') }).FullName }
+        [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths
         return [PsImport]::GetFunction($FnName, $FilePaths, $throwOnFailure)
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths, [bool]$throwOnFailure) {
+        # $j = ",`n"; Write-Debug "Paths: $($FilePaths -join $j)" -Debug
         # Validate paths and select only those which can be resolved
         $_FilePaths = @(); foreach ($path in $FilePaths) {
             if ([string]::IsNullOrWhiteSpace($Path)) { continue };
@@ -58,8 +59,9 @@ Class PsImport {
                 throw [System.InvalidOperationException]::New("Could not import from '$path'. Path is not a valid url")
             }
         }
+        [ValidateNotNullOrEmpty()][string[]]$_FilePaths = $_FilePaths
         if ($FnName -ne "*") {
-            return [PsImport]::ParseFile($_FilePaths).Where({ $_.Name -in $FnName })
+            return [PsImport]::ParseFile($_FilePaths).Where({ $_.Name -eq $FnName })
         } else {
             return [PsImport]::ParseFile($_FilePaths)
         }
