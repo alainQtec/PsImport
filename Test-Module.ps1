@@ -50,12 +50,12 @@ begin {
         throw [System.IO.FileNotFoundException]::New("Could Not Find Module manifest File $([IO.Path]::GetRelativePath($PSScriptRoot, $manifestFile.FullName))")
     }
     if (![IO.Path]::Exists([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1"))) { throw [System.IO.FileNotFoundException]::New("Module manifest file Was not Found in '$($BuildOutDir.FullName)'.") }
-    $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine($TestsPath, 'Resources'))
-    $resRlPath = [IO.Path]::GetRelativePath($PSScriptRoot, $Resources.FullName)
+    $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$TestsPath", 'Resources'))
+    $resRlPath = [IO.Path]::GetRelativePath("$PSScriptRoot", "$($Resources.FullName)")
     $script:fnNames = [System.Collections.Generic.List[string]]::New(); $testFiles = [System.Collections.Generic.List[IO.FileInfo]]::New()
-    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, 'Tests', 'devHelper.PsImport.Intergration.Tests.ps1')))
-    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, 'Tests', 'devHelper.PsImport.Features.Tests.ps1')))
-    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine($PSScriptRoot, 'Tests', 'devHelper.PsImport.Module.Tests.ps1')))
+    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'devHelper.PsImport.Intergration.Tests.ps1')))
+    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'devHelper.PsImport.Features.Tests.ps1')))
+    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'devHelper.PsImport.Module.Tests.ps1')))
     $create_Random_functions = [scriptblock]::Create({
             param ([ValidateRange(1, 10)][int]$Count)
             $prefixes = @('Test-Function', 'Test-Func', 'Test-UtilFunc', 'Test-HelperFunc')
@@ -174,56 +174,54 @@ process {
         [string]::Join("', '", (Get-Random -InputObject $scriptNames -Count 2))
     )
     [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt 12) { $_.Substring(13) } }), [System.Text.Encoding]::UTF8)
-    [System.IO.DirectoryInfo]::new([IO.Path]::Combine($PSScriptRoot, 'Public')).GetFiles().ForEach({
+    [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$PSScriptRoot", 'Public')).GetFiles().ForEach({
             $n = [IO.Path]::GetFileNameWithoutExtension($_.FullName)
             $s = [System.Text.StringBuilder]::New(); [void]$s.AppendLine("Describe `"$n`" {`n    It `"should have command`" {`n        Get-Command $n | Should -Not -BeNullOrEmpty`n    }`n}")
             Add-Content -Path $ntTestsPath -Value $s.ToString() -Encoding utf8
         }
     )
     if ($BuildOutDir.Exists) {
-        if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 1) {
-            $ModuleTestScript = [scriptblock]::Create({
-                    $projectRoot = Resolve-Path ([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'))
-                    $ModulePath = Resolve-Path ([IO.Path]::Combine($projectRoot, 'BuildOutput', [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))); # Decompiled ModulePath
-                    $decomPath = [IO.DirectoryInfo]::New([IO.Path]::Combine($projectRoot, [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')));
-                    $Publc_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($decomPath.FullName, 'Public'));
-                    $Privt_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($decomPath.FullName, 'Private'));
-                    ($decomPath, $Publc_Dir, $Privt_Dir).ForEach({ if (!$_.Exists) { Throw [System.IO.DirectoryNotFoundException]::New("Directory $($_.FullName) does not exist.") } })
-                    # Verbose output for non-main builds on appveyor
-                    # Handy for troubleshooting.
-                    # Splat @Verbose against commands as needed (here or in pester tests)
-                    $Verbose = @{}
-                    if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "development" -or $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match "!verbose") {
-                        $Verbose.add("Verbose", $True)
-                    }
+        $ModuleTestScript = [scriptblock]::Create({
+                $ModulePath = $BuildOutDir.Parent.FullName;
+                $Publc_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, 'Public'));
+                $Privt_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, 'Private'));
+                    ($BuildOutDir, $Publc_Dir, $Privt_Dir).ForEach({ if (!$_.Exists) { Throw [System.IO.DirectoryNotFoundException]::New("Directory $($_.FullName) does not exist.") } })
+                # Verbose output for non-main builds on appveyor
+                # Handy for troubleshooting.
+                # Splat @Verbose against commands as needed (here or in pester tests)
+                $Verbose = @{}
+                if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "development" -or $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match "!verbose") {
+                    $Verbose.add("Verbose", $True)
+                }
 
-                    Import-Module $ModulePath -Force -Verbose:$false
+                Import-Module $ModulePath -Force -Verbose:$false
 
-                    Describe "Module tests: $($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')))" -Tag 'Module' {
-                        Context "Confirm files are valid Powershell syntax" {
-                            $_scripts = $decomPath.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
-                            $testCase = $_scripts | ForEach-Object { @{ file = $_ } }
-                            It "Script <file> Should -Be valid Powershell" -TestCases $testCase {
-                                param($file)
-                                $file.fullname | Should Exist
-                                $contents = Get-Content -Path $file.fullname -ErrorAction Stop
-                                $errors = $null
-                                $null = [System.Management.Automation.PSParser]::Tokenize($contents, [ref]$errors)
-                                $errors.Count | Should -Be 0
-                            }
+                Describe "Module tests: $($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')))" -Tag 'Module' {
+                    Context "Confirm files are valid Powershell syntax" {
+                        $_scripts = $BuildOutDir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
+                        $testCase = $_scripts | ForEach-Object { @{ file = $_ } }
+                        It "Script <file> Should -Be valid Powershell" -TestCases $testCase {
+                            param($file)
+                            $file.fullname | Should Exist
+                            $contents = Get-Content -Path $file.fullname -ErrorAction Stop
+                            $errors = $null
+                            $null = [System.Management.Automation.PSParser]::Tokenize($contents, [ref]$errors)
+                            $errors.Count | Should -Be 0
                         }
-                        Context "Confirm there are no duplicate function names in private and public folders" {
-                            It 'Should have no duplicate functions' {
-                                $funcNames = [System.Collections.generic.List[string]]::new()
-                                $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -eq '.ps1' }).BaseName.ForEach({ [void]$funcNames.Add($_) })
-                                $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -eq '.ps1' }).BaseName.ForEach({ [void]$funcNames.Add($_) })
-                                $funcNames | Group-Object | Where-Object { $_.Count -gt 1 } | Select-Object -ExpandProperty Count | Should -BeLessThan 1
-                            }
+                    }
+                    Context "Confirm there are no duplicate function names in private and public folders" {
+                        It 'Should have no duplicate functions' {
+                            $funcNames = [System.Collections.generic.List[string]]::new()
+                            $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -eq '.ps1' }).BaseName.ForEach({ [void]$funcNames.Add($_) })
+                            $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -eq '.ps1' }).BaseName.ForEach({ [void]$funcNames.Add($_) })
+                            $funcNames | Group-Object | Where-Object { $_.Count -gt 1 } | Select-Object -ExpandProperty Count | Should -BeLessThan 1
                         }
                     }
                 }
-            )
-            [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Tostring().Split("`r").ForEach({ if ($_.Length -gt 20) { $_.Substring(21) } }), [System.Text.Encoding]::UTF8)
+            }
+        )
+        if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 2) {
+            [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Tostring().Split("`r").ForEach({ if ($_.Length -gt 16) { $_.Substring(17) } }), [System.Text.Encoding]::UTF8)
         }
     } else {
         Remove-Item $mtTestsPath -Force
