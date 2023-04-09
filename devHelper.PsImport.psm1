@@ -36,7 +36,9 @@ Class PsImport {
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath, [bool]$throwOnFailure) {
         [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string]$FilePath = $FilePath
-        [string[]]$FilePaths = if ($FilePath.Contains('*') -or ([IO.DirectoryInfo]::new($FilePath).Attributes -eq 'Directory')) { @(Get-Item $FilePath | Where-Object { $_.Attributes.ToString() -ne 'Directory' } | Select-Object -ExpandProperty FullName) } else { @($FilePath) }
+        [string[]]$FilePaths = @($FilePath)
+        if ([IO.DirectoryInfo]::new($FilePath).Attributes -eq 'Directory') { $FilePath = "{0}*" -f (Resolve-Path $FilePath) }
+        $FilePaths = @(Get-Item $FilePath | Where-Object { [string]$_.Attributes -ne 'Directory' } | Select-Object -ExpandProperty FullName)
         return [PsImport]::GetFunction($FnName, $FilePaths, $throwOnFailure)
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths, [bool]$throwOnFailure) {
@@ -278,4 +280,4 @@ foreach ($file in ($Public, $Private)) {
 }
 # Export Public Functions
 $Public | ForEach-Object { Export-ModuleMember -Function $_.BaseName }
-Export-ModuleMember -Alias @('Import')
+Export-ModuleMember -Alias @('Import', 'require')
