@@ -8,11 +8,14 @@
         Only Created to work with the "devHelper.PsImport" module. (Its not tested for other use cases)
     .LINK
         https://github.com/alainQtec/devHelper.PsImport/blob/main/Private/Resolve-FilePath.ps1
+    .OUTPUTS
+        [String[]]
     .EXAMPLE
         Resolve-FilePath *
         will list fullNames of files in current location; thus [psimport]::ParseFile("*") will parse any powershell file in current location.
     #>
     [CmdletBinding(DefaultParameterSetName = 'singlePath')]
+    [OutputType([System.Object[]])]
     param (
         [Parameter(Mandatory = $true, Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'singlePath')]
         [ValidateNotNullOrEmpty()][string]$Path,
