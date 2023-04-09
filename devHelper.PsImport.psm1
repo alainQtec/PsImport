@@ -48,15 +48,17 @@ Class PsImport {
             if ([string]::IsNullOrWhiteSpace($Path)) { continue };
             $uri = $path -as 'Uri'
             if ($uri -is [Uri]) {
-                if ($uri.Scheme -notin ("file", "https")) { throw [System.IO.InvalidDataException]::New("Input URL is not a valid file or HTTPS URL.") }
                 if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                     $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
                     [void][PsImport]::DownloadFile($uri, $outFile.FullName);
                     $_FilePaths += $outFile.FullName; continue
                 }
                 $_FilePaths += Resolve-FilePath -Path $path -throwOnFailure:$throwOnFailure -NoAmbiguous
+                if (([Uri[]]$_FilePaths | Where-Object { $_.Scheme -notin ("file", "https") }).Count -gt 0) {
+                    throw [System.IO.InvalidDataException]::New("Input URL is not a valid filePath or HTTPS URL.")
+                }
             } else {
-                throw [System.InvalidOperationException]::New("Could not import from '$path'. Path is not a valid url")
+                throw [System.InvalidOperationException]::New("Could not import from '$path'. Please use a valid url.")
             }
         }
         [ValidateNotNullOrEmpty()][string[]]$_FilePaths = $_FilePaths
