@@ -139,7 +139,7 @@ Class PsImport {
         if ($dotNET_Framework_version -ge [version]'4.5') {
             # since System.Net.Http.HttpCompletionOption enumeration is not available in .NET Framework versions prior to 4.5
             # &yes this is faster than iwr, so u better off update your dotnet versions.
-            Write-Verbose "Downloading $Name to $Outfile ... " -Verbose
+            Write-Verbose "Downloading $Name to $Outfile ... "
             $client = [System.Net.Http.HttpClient]::New()
             $client.DefaultRequestHeaders.Add("x-ms-download-header-content-disposition", "attachment")
             $client.DefaultRequestHeaders.Add("x-ms-download-content-type", "application/octet-stream")
@@ -147,7 +147,8 @@ Class PsImport {
             $client.DefaultRequestHeaders.Add("x-ms-download-id", [Guid]::NewGuid().ToString())
             # Download the file and save it to a Stream
             $response = $client.GetAsync($uri, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).Result
-            $stream = $response.Content.ReadAsStreamAsync().Result
+            $contents = $response.Content; if ($null -eq $contents) { Throw [System.InvalidOperationException]::New('Got $null HttpResponse.Result.content. Please Try again.') }
+            $stream = $contents.ReadAsStreamAsync().Result
             # Create a FileStream object to write the data to the file
             $fileStream = [System.IO.FileStream]::new($outFile, [System.IO.FileMode]::Create)
             # Copy the data from the Stream to the FileStream
@@ -155,7 +156,7 @@ Class PsImport {
             # Close the Stream and FileStream
             $stream.Close()
             $fileStream.Close()
-            Write-Verbose "Done." -Verbose
+            Write-Verbose "Download Complete."
         } else {
             Write-Debug "Using iwr :(" -Debug
             Invoke-WebRequest -Uri $uri -OutFile $outFile -Verbose:$false
