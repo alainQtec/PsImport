@@ -149,7 +149,7 @@ process {
                 Context "When importing specific functions from a remote script" {
                     It "should import only the specified function from the remote script" {
                         $expectedFunctions = @('Test-GitHubScript')
-                        (Import Test-GitHubScript -from 'https://github.com/alainQtec/PsImport/raw/main/Tests/Resources/Test-GitHubScript.ps1').ForEach({ . $_ })
+                        (Import Test-GitHubScript -from 'https://github.com/alainQtec/PowershellScripts/raw/main/Test-GitHubScript.ps1').ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
