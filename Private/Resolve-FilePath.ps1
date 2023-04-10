@@ -5,9 +5,9 @@
     .DESCRIPTION
         Gets the full Path of any file in a repo
     .NOTES
-        Only Created to work with the "devHelper.PsImport" module. (Its not tested for other use cases)
+        Only Created to work with the "PsImport" module. (Its not tested for other use cases)
     .LINK
-        https://github.com/alainQtec/devHelper.PsImport/blob/main/Private/Resolve-FilePath.ps1
+        https://github.com/alainQtec/PsImport/blob/main/Private/Resolve-FilePath.ps1
     .OUTPUTS
         [String[]]
     .EXAMPLE
