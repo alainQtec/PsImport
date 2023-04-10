@@ -1,13 +1,13 @@
-# [**PsImport**](https://github.com/alainQtec/devHelper.PsImport)
+# [**PsImport**](https://github.com/alainQtec/PsImport)
 
-A module to **import functions** from PowerShell scripts in your project, and "remote scripts"* making it easier to organize and reuse your code.
+The PsImport module is a PowerShell tool that helps with dot-sourcing functions from scripts.
 
-The remote scripts part **is a somehow similar functionality to JavaScript's ES module import feature* but this is still is security concerns. ([ideas are welcome](https://github.com/alainQtec/devHelper.PsImport/discussions/1)!)
+Pretty handy when working with complex powershell Projects with many functions spread across multiple files.
 
 ## **Installation**
 
 ```PowerShell
-Install-Module devHelper.PsImport
+Install-Module PsImport
 ```
 
 ## **Features**
@@ -46,21 +46,17 @@ Install-Module devHelper.PsImport
 
 ## **Todos**
 
-Here are features currently being built:
-
-* Securely import remote scripts.
-
 * Fix edge cases when parsing files.
 
-ie: Sometimes it does not find all function declarations in file $filepath.
+    Sometimes it does not find all function declarations in file $filepath.
 
-```PowerShell
-[PsImport]::ParseFile($Filepath)
-```
+    ```PowerShell
+    [PsImport]::ParseFile($Filepath)
+    ```
 
-For now it Works as expected only when there is a clear newline char (ie: "`n") between each function in the file.
+    For now it Works as expected only when there is a clear newline char (ie: "`n") between each function in the file.
 
-* Add "Import a function from a module" feature
+* Remove (/ Find a workarround) for the '.ForEach({ . $_ })' that is used in the import syntax.
 
 ## **Contributing**
 

@@ -11,7 +11,7 @@
     .NOTES
         Inspiration: https://gist.github.com/alainQtec/71123a1d28f37eaa49fd032ba0248650
     .LINK
-        https://github.com/alainQtec/devHelper.PsImport/blob/main/Public/Get-Function.ps1
+        https://github.com/alainQtec/PsImport/blob/main/Public/Get-Function.ps1
     .EXAMPLE
         (Import fnName1, fnName2 -From '/relative/path/to/script.ps1').ForEach({ . $_ })
         # Imports the functions fnName1 fnName2

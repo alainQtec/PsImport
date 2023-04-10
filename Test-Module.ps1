@@ -3,10 +3,10 @@
     Run Tests
 .EXAMPLE
     .\Test-Module.ps1 -version 0.1.0
-    Will test the module in .\BuildOutput\devHelper.PsImport\0.1.0\
+    Will test the module in .\BuildOutput\PsImport\0.1.0\
 .EXAMPLE
     .\Test-Module.ps1
-    Will test the latest  module version in .\BuildOutput\devHelper.PsImport\
+    Will test the latest  module version in .\BuildOutput\PsImport\
 #>
 param (
     [Parameter(Mandatory = $false, Position = 0)]
@@ -33,10 +33,10 @@ begin {
     $TestResults = $null
     # Get latest version
     if ([string]::IsNullOrWhiteSpace($version)) {
-        $version = [version[]][IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'devHelper.PsImport')).GetDirectories().Name | Select-Object -Last 1
+        $version = [version[]][IO.DirectoryInfo]::New([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'PsImport')).GetDirectories().Name | Select-Object -Last 1
     }
-    $BuildOutDir = [IO.DirectoryInfo]::New((Resolve-Path ([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'devHelper.PsImport', $version)) -ErrorAction Stop))
-    $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "devHelper.PsImport.psd1"))
+    $BuildOutDir = [IO.DirectoryInfo]::New((Resolve-Path ([IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'PsImport', $version)) -ErrorAction Stop))
+    $manifestFile = [IO.FileInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, "PsImport.psd1"))
     Write-Host "[+] Checking Prerequisites ..." -ForegroundColor Green
     if (!$BuildOutDir.Exists) {
         $msg = 'Directory "{0}" Not Found' -f ([IO.Path]::GetRelativePath($PSScriptRoot, $BuildOutDir.FullName))
@@ -49,13 +49,13 @@ begin {
     if (!$skipBuildOutputTest.IsPresent -and !$manifestFile.Exists) {
         throw [System.IO.FileNotFoundException]::New("Could Not Find Module manifest File $([IO.Path]::GetRelativePath($PSScriptRoot, $manifestFile.FullName))")
     }
-    if (![IO.Path]::Exists([IO.Path]::Combine($PSScriptRoot, "devHelper.PsImport.psd1"))) { throw [System.IO.FileNotFoundException]::New("Module manifest file Was not Found in '$($BuildOutDir.FullName)'.") }
+    if (![IO.Path]::Exists([IO.Path]::Combine($PSScriptRoot, "PsImport.psd1"))) { throw [System.IO.FileNotFoundException]::New("Module manifest file Was not Found in '$($BuildOutDir.FullName)'.") }
     $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$TestsPath", 'Resources'))
     $resRlPath = [IO.Path]::GetRelativePath("$PSScriptRoot", "$($Resources.FullName)")
     $script:fnNames = [System.Collections.Generic.List[string]]::New(); $testFiles = [System.Collections.Generic.List[IO.FileInfo]]::New()
-    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'devHelper.PsImport.Intergration.Tests.ps1')))
-    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'devHelper.PsImport.Features.Tests.ps1')))
-    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'devHelper.PsImport.Module.Tests.ps1')))
+    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'PsImport.Intergration.Tests.ps1')))
+    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'PsImport.Features.Tests.ps1')))
+    [void]$testFiles.Add([IO.FileInfo]::New([IO.Path]::Combine("$PSScriptRoot", 'Tests', 'PsImport.Module.Tests.ps1')))
     $create_Random_functions = [scriptblock]::Create({
             param ([ValidateRange(1, 10)][int]$Count)
             $prefixes = @('Test-Function', 'Test-Func', 'Test-UtilFunc', 'Test-HelperFunc')
@@ -83,7 +83,7 @@ begin {
 }
 
 process {
-    Get-Module devHelper.PsImport | Remove-Module
+    Get-Module PsImport | Remove-Module
     Write-Host "[+] Generating test files ..." -ForegroundColor Green
     $testFiles | ForEach-Object {
         if ($_.Exists) { Remove-Item -Path $_.FullName -Force };
@@ -109,9 +109,9 @@ process {
         Write-Host "    Created $FileName" -ForegroundColor Gray
     }
     Write-Host "[+] Writing tests ..." -ForegroundColor Green
-    $ntTestsPath = $testFiles.Where({ $_.BaseName -eq 'devHelper.PsImport.Intergration.Tests' }).FullName
-    $ftTestsPath = $testFiles.Where({ $_.BaseName -eq 'devHelper.PsImport.Features.Tests' }).FullName
-    $mtTestsPath = $testFiles.Where({ $_.BaseName -eq 'devHelper.PsImport.Module.Tests' }).FullName
+    $ntTestsPath = $testFiles.Where({ $_.BaseName -eq 'PsImport.Intergration.Tests' }).FullName
+    $ftTestsPath = $testFiles.Where({ $_.BaseName -eq 'PsImport.Features.Tests' }).FullName
+    $mtTestsPath = $testFiles.Where({ $_.BaseName -eq 'PsImport.Module.Tests' }).FullName
     $scriptNames = $testFiles.Where({ $_.Extension -eq '.ps1' -and $_.BaseName.Contains('-') }).BaseName
     $ftTestScrpt = [scriptblock]::Create({
             #1. Test feature: Support for wildcards
@@ -149,7 +149,7 @@ process {
                 Context "When importing specific functions from a remote script" {
                     It "should import only the specified function from the remote script" {
                         $expectedFunctions = @('Test-GitHubScript')
-                        (Import Test-GitHubScript -from 'https://github.com/alainQtec/devHelper.PsImport/raw/main/Tests/Resources/Test-GitHubScript.ps1').ForEach({ . $_ })
+                        (Import Test-GitHubScript -from 'https://github.com/alainQtec/PsImport/raw/main/Tests/Resources/Test-GitHubScript.ps1').ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }

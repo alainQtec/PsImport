@@ -405,7 +405,7 @@ FodyWeavers.xsd
 BuildOutput/
 Tests/results.xml
 Tests/Resources/
-Tests/devHelper.PsImport.Module.Tests.ps1
-Tests/devHelper.PsImport.Features.Tests.ps1
-Tests/devHelper.PsImport.Intergration.Tests.ps1
+Tests/PsImport.Module.Tests.ps1
+Tests/PsImport.Features.Tests.ps1
+Tests/PsImport.Intergration.Tests.ps1
 Tests/Resources/Test-GitHubScript.ps1
