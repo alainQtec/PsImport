@@ -130,7 +130,7 @@ Class PsImport {
     static [void] DownloadFile([string]$uri, [string]$outFile, [bool]$Force) {
         [ValidateNotNullOrEmpty()][string]$uri = [uri]$uri;
         [ValidateNotNullOrEmpty()][string]$outFile = [IO.Path]::GetFullPath($outFile)
-        if ([IO.Path]::Exists($outFile)) {
+        if ((Test-Path -Path $outFile -PathType Leaf -ErrorAction Ignore)) {
             if (!$Force) { throw "$outFile already exists" }
             Remove-Item $outFile -Force -ErrorAction Ignore | Out-Null
         }

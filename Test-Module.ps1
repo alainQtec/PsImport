@@ -49,7 +49,7 @@ begin {
     if (!$skipBuildOutputTest.IsPresent -and !$manifestFile.Exists) {
         throw [System.IO.FileNotFoundException]::New("Could Not Find Module manifest File $([IO.Path]::GetRelativePath($PSScriptRoot, $manifestFile.FullName))")
     }
-    if (![IO.Path]::Exists([IO.Path]::Combine($PSScriptRoot, "PsImport.psd1"))) { throw [System.IO.FileNotFoundException]::New("Module manifest file Was not Found in '$($BuildOutDir.FullName)'.") }
+    if (!(Test-Path -Path $([IO.Path]::Combine($PSScriptRoot, "PsImport.psd1")) -PathType Leaf -ErrorAction Ignore)) { throw [System.IO.FileNotFoundException]::New("Module manifest file Was not Found in '$($BuildOutDir.FullName)'.") }
     $Resources = [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$TestsPath", 'Resources'))
     $resRlPath = [IO.Path]::GetRelativePath("$PSScriptRoot", "$($Resources.FullName)")
     $script:fnNames = [System.Collections.Generic.List[string]]::New(); $testFiles = [System.Collections.Generic.List[IO.FileInfo]]::New()

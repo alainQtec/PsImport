@@ -37,14 +37,14 @@
                 continue
             }
             $resolvedPaths = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p);
-            $existingPaths = $resolvedPaths | Where-Object { [IO.Path]::Exists($_) };
+            $existingPaths = $resolvedPaths | Where-Object { (Test-Path -Path $_ -PathType Any -ErrorAction Ignore) };
             $resolvedPaths, $error_Msg = switch ($true) {
                 ($existingPaths.Count -gt 1) {
                     if ($NoAmbiguous) { $existingPaths[0], "Path '$p' is ambiguous: $($existingPaths -join ', ')" } else { $existingPaths, $null };
                     break
                 }
                 ($existingPaths.Count -eq 0) {
-                    $fp = $null; if ([IO.Path]::Exists($rRoot)) {
+                    $fp = $null; if ((Test-Path -Path $rRoot -PathType Container -ErrorAction Ignore)) {
                         $ft = if (![IO.Path]::HasExtension($p)) { $p + '*' } else { $p }
                         $fp = Get-ChildItem -Recurse -Path $rRoot -Filter $ft -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
                     }

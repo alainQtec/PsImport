@@ -598,7 +598,7 @@ Begin {
             }
             $downloadUrl = $response.content.src
             Write-Host "Installing $moduleName ... " -NoNewline -ForegroundColor DarkCyan
-            if (![IO.Path]::Exists($Module_Path)) {
+            if (!(Test-Path -Path $Module_Path -PathType Container -ErrorAction Ignore)) {
                 [ValidateNotNullOrEmpty()][System.IO.DirectoryInfo]$Path = [System.IO.DirectoryInfo]::New($Module_Path)
                 $nF = @(); $p = $Path; while (!$p.Exists) { $nF += $p; $p = $p.Parent }
                 [Array]::Reverse($nF); $nF | ForEach-Object { $_.Create() }
