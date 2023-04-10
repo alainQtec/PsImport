@@ -231,7 +231,7 @@ process {
 end {
     if ($CleanUp.IsPresent) {
         Write-Host "[+] Clean Up ..." -ForegroundColor Green
-        $Resources.GetFiles().Where({ $_.Name -ne 'Test-GitHubScript.ps1' }) | ForEach-Object {
+        $Resources.GetFiles() | ForEach-Object {
             Remove-Item -Path $_.FullName -Force
             Write-Host "    removed $($_.Name)" -ForegroundColor Gray
         }
