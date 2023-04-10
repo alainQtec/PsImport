@@ -663,16 +663,16 @@ Begin {
         process {
             foreach ($moduleName in $Names) {
                 Write-Host "Resolving Module [$moduleName]" -ForegroundColor Magenta
-                $module = Get-Module -Name $moduleName -ListAvailable -ErrorAction SilentlyContinue
+                $module = Get-Module -Name $moduleName -ListAvailable -ErrorAction SilentlyContinue; $ModulePsd1 = $null
                 if ($module) {
                     # Determine latest version on PSGallery and warn us if we're out of date
                     $latestLocalVersion = ($module | Measure-Object -Property Version -Maximum).Maximum -as [version]
                     $latestGalleryVersion = Get-LatestModuleVersion -Name $moduleName
                     if (!$latestGalleryVersion) {
-                        Write-Warning "Unable to find module $moduleName. Check your internet connection."
+                        Write-Warning "Failed to find latest module version for '$moduleName'. Check your internet connection."
                     } elseif ($latestLocalVersion -lt $latestGalleryVersion -and $UpdateModules.IsPresent) {
                         Write-Verbose -Message "$moduleName installed version [$latestLocalVersion] is outdated. Installing gallery version [$latestGalleryVersion]."
-                        Install-PsGalleryModule -Name $moduleName -Version $latestGalleryVersion
+                        $ModulePsd1 = Install-PsGalleryModule -Name $moduleName -Version $latestGalleryVersion
                     }
                 } else {
                     Write-Verbose -Message "[$moduleName] missing. Installing..."
@@ -680,7 +680,7 @@ Begin {
                 }
                 $versionToImport = (Get-Module -Name $moduleName -ListAvailable | Measure-Object -Property Version -Maximum).Maximum
                 Write-Verbose -Message "Importing module $moduleName."
-                if ($ModulePsd1) {
+                if ($null -ne $ModulePsd1) {
                     Import-Module $ModulePsd1.FullName
                 } else {
                     if (![string]::IsNullOrEmpty($versionToImport)) {
