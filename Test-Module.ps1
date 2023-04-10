@@ -206,10 +206,9 @@ process {
                     }
                     Context "Confirm there are no duplicate function names in private and public folders" {
                         It 'Should have no duplicate functions' {
-                            $funcNames = [System.Collections.generic.List[string]]::new()
-                            $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { [void]$funcNames.Add($_.BaseName) }
-                            $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { [void]$funcNames.Add($_.BaseName) }
-                            $funcNames | Group-Object | Where-Object { $_.Count -gt 1 } | Select-Object -ExpandProperty Count | Should -BeLessThan 1
+                            $funcNames = @()
+                            $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) + $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { $funcNames += $_.BaseName }
+                            ($funcNames | Group-Object | Where-Object { $_.Count -gt 1 }).Count | Should -BeLessThan 1
                         }
                     }
                 }
