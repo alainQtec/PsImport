@@ -118,7 +118,7 @@ phases:
 
       - powershell: |
           $Env:Path = [Environment]::GetEnvironmentVariable('Path',[EnvironmentVariableTarget]::Machine)
-          pwsh -command ". ./build.ps1 -Task Test"
+          pwsh -command "./build.ps1 -Task Test"
         displayName: Test Module
 
       - task: PublishTestResults@2
