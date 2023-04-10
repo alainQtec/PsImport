@@ -15,7 +15,7 @@ Install-Module devHelper.PsImport
 * **Supports wildcards**:
 
     ```PowerShell
-    Import * -from '/relative/path/to/script.ps1'
+    (Import * -from '/relative/path/to/script.ps1').ForEach({ . $_ })
     ```
 
     Will load functions from the file into current script scope.
@@ -23,7 +23,7 @@ Install-Module devHelper.PsImport
 * **Importing from many files at once**:
 
     ```PowerShell
-    Import * -from '/relative/path/to/fileNamedlikeabc*.ps1'
+    (Import * -from '/relative/path/to/fileNamedlikeabc*.ps1').ForEach({ . $_ })
     ```
 
     Will load all functions from .ps1 files that look like fileNamedlikeabc
@@ -31,7 +31,7 @@ Install-Module devHelper.PsImport
 * **Import a function(s) from same repo**
 
     ```PowerShell
-    Import funcName1, funcName2 -from fileNameb
+    (Import funcName1, funcName2 -from fileNameb).ForEach({ . $_ })
     ```
 
     Will only load functions funcName1 and funcName2 from fileNameb.
@@ -41,7 +41,7 @@ Install-Module devHelper.PsImport
 * **Import a function(s) from a remote script**
 
     ```PowerShell
-    Import funcName -from https://example.com/MyRemoteScript.ps1
+    (Import funcName -from https://example.com/MyRemoteScript.ps1).ForEach({ . $_ })
     ```
 
 ## **Todos**
