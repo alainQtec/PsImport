@@ -177,7 +177,7 @@ Begin {
                 }
                 Remove-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')) -ErrorAction SilentlyContinue -Verbose:$false
                 Import-Module $outputModDir -Force -Verbose:$false
-                $test_Script = [IO.FileInfo]::New('Test-Module.ps1')
+                $test_Script = [IO.FileInfo]::New([IO.Path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'), 'Test-Module.ps1'))
                 if (!$test_Script.Exists) { throw [System.IO.FileNotFoundException]::New($test_Script.FullName) }
                 $TestResults = & $test_Script
                 '    Pester invocation complete!'
