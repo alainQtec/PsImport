@@ -60,7 +60,7 @@
             if ($throwOnFailure) {
                 throw $error_Msg
             } else {
-                Write-Warning -Message $error_Msg
+                Write-Verbose $error_Msg
             }
         }
     }
