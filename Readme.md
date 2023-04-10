@@ -1,6 +1,6 @@
 # [**PsImport**](https://github.com/alainQtec/PsImport)
 
-The PsImport module is a PowerShell tool that helps with dot-sourcing functions from scripts.
+A PowerShell module for dot-sourcing functions from scripts.
 
 Pretty handy when working with complex powershell Projects with many functions spread across multiple files.
 
@@ -58,7 +58,9 @@ Install-Module PsImport
 
 * Remove (/ Find a workarround) for the '.ForEach({ . $_ })' that is used in the import syntax.
 
-## **Contributing**
+## **Contributions**
+
+![Alt](https://repobeats.axiom.co/api/embed/c7f1a37fb73368e4265faca921b76e3d4448defb.svg "Repobeats analytics image")
 
 If you would like to contribute to psimport, please feel free to submit a pull request on GitHub. We welcome contributions of all kinds, from bug fixes to new features.
 
