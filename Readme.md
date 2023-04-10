@@ -4,6 +4,10 @@ A PowerShell module for dot-sourcing functions from scripts.
 
 Pretty handy when working with complex powershell Projects with many functions spread across multiple files.
 
+[![CI](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml/badge.svg)](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml)
+[![Upload artifact from Ubuntu](https://github.com/alainQtec/PsImport/actions/workflows/Upload_Artifact.yaml/badge.svg)](https://github.com/alainQtec/PsImport/actions/workflows/Upload_Artifact.yaml)
+[![Publish to PowerShell Gallery](https://github.com/alainQtec/PsImport/actions/workflows/Publish.yaml/badge.svg)](https://github.com/alainQtec/PsImport/actions/workflows/Publish.yaml)
+
 ## **Installation**
 
 ```PowerShell
