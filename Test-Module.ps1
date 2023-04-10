@@ -84,11 +84,6 @@ begin {
 
 process {
     Get-Module devHelper.PsImport | Remove-Module
-    if ($version) {
-        Import-Module (Split-Path $BuildOutDir.FullName) -Version $version
-    } else {
-        Import-Module $BuildOutDir.FullName
-    }
     Write-Host "[+] Generating test files ..." -ForegroundColor Green
     $testFiles | ForEach-Object {
         if ($_.Exists) { Remove-Item -Path $_.FullName -Force };
@@ -124,7 +119,7 @@ process {
                 Context "When importing functions with a wildcard in the filename" {
                     It "should import all functions matching the pattern from file" {
                         $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
-                        Import * -from "./relative/path/to/script_File.psm1"
+                        (Import * -from "./relative/path/to/script_File.psm1").ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
@@ -134,7 +129,7 @@ process {
                 Context "When importing functions from multiple files" {
                     It "should import all functions from all files" {
                         $expectedFunctions = @(Get-Content "./relative/path/to/fileNamedlikeabc*.ps1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
-                        Import * -from "./relative/path/to/fileNamedlikeabc*.ps1"
+                        (Import * -from "./relative/path/to/fileNamedlikeabc*.ps1").ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
@@ -144,7 +139,7 @@ process {
                 Context "When importing specific functions from the same repo" {
                     It "should import only the specified functions from the specified file" {
                         $expectedFunctions = @('funcName1', 'funcName2')
-                        Import 'funcName1', 'funcName2' -from "./repo"
+                        (Import 'funcName1', 'funcName2' -from "./repo").ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
@@ -154,7 +149,7 @@ process {
                 Context "When importing specific functions from a remote script" {
                     It "should import only the specified function from the remote script" {
                         $expectedFunctions = @('Test-GitHubScript')
-                        Import Test-GitHubScript -from 'https://github.com/alainQtec/devHelper.PsImport/raw/main/Tests/Resources/Test-GitHubScript.ps1'
+                        (Import Test-GitHubScript -from 'https://github.com/alainQtec/devHelper.PsImport/raw/main/Tests/Resources/Test-GitHubScript.ps1').ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
                     }
                 }
@@ -182,10 +177,11 @@ process {
     )
     if ($BuildOutDir.Exists) {
         $ModuleTestScript = [scriptblock]::Create({
-                $ModulePath = $BuildOutDir.Parent.FullName;
-                $Publc_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, 'Public'));
-                $Privt_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutDir.FullName, 'Private'));
-                    ($BuildOutDir, $Publc_Dir, $Privt_Dir).ForEach({ if (!$_.Exists) { Throw [System.IO.DirectoryNotFoundException]::New("Directory $($_.FullName) does not exist.") } })
+                $Modversion = "<Modversion>";
+                $BuildOutpt = [IO.DirectoryInfo]::New("<BuildOutpt_FullName>")
+                $Publc_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutpt.FullName, 'Public'));
+                $Privt_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutpt.FullName, 'Private'));
+                $($BuildOutpt, $Publc_Dir, $Privt_Dir).ForEach({ if (!$_.Exists) { Throw [System.IO.DirectoryNotFoundException]::New("Directory $($_.FullName) does not exist.") } })
                 # Verbose output for non-main builds on appveyor
                 # Handy for troubleshooting.
                 # Splat @Verbose against commands as needed (here or in pester tests)
@@ -193,35 +189,34 @@ process {
                 if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "development" -or $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match "!verbose") {
                     $Verbose.add("Verbose", $True)
                 }
-
-                Import-Module $ModulePath -Force -Verbose:$false
-
+                if ([string]::IsNullOrWhiteSpace($Modversion)) {
+                    Import-Module $BuildOutpt.FullName -Version $Modversion
+                } else {
+                    Import-Module $BuildOutpt.Parent.FullName
+                }
                 Describe "Module tests: $($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')))" -Tag 'Module' {
                     Context "Confirm files are valid Powershell syntax" {
-                        $_scripts = $BuildOutDir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
+                        $_scripts = $BuildOutpt.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
                         $testCase = $_scripts | ForEach-Object { @{ file = $_ } }
-                        It "Script <file> Should -Be valid Powershell" -TestCases $testCase {
-                            param($file)
-                            $file.fullname | Should Exist
-                            $contents = Get-Content -Path $file.fullname -ErrorAction Stop
-                            $errors = $null
-                            $null = [System.Management.Automation.PSParser]::Tokenize($contents, [ref]$errors)
+                        It "Script <file> Should have valid Powershell sysntax" -TestCases $testCase {
+                            param($file) $contents = Get-Content -Path $file.fullname -ErrorAction Stop
+                            $errors = $null; [void][System.Management.Automation.PSParser]::Tokenize($contents, [ref]$errors)
                             $errors.Count | Should -Be 0
                         }
                     }
                     Context "Confirm there are no duplicate function names in private and public folders" {
                         It 'Should have no duplicate functions' {
                             $funcNames = [System.Collections.generic.List[string]]::new()
-                            $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -eq '.ps1' }).BaseName.ForEach({ [void]$funcNames.Add($_) })
-                            $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -eq '.ps1' }).BaseName.ForEach({ [void]$funcNames.Add($_) })
+                            $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { [void]$funcNames.Add($_.BaseName) }
+                            $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { [void]$funcNames.Add($_.BaseName) }
                             $funcNames | Group-Object | Where-Object { $_.Count -gt 1 } | Select-Object -ExpandProperty Count | Should -BeLessThan 1
                         }
                     }
                 }
             }
-        )
+        ).ToString().Replace( "<BuildOutpt_FullName>", $BuildOutDir.FullName).Replace("<Modversion>", $version)
         if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 2) {
-            [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Tostring().Split("`r").ForEach({ if ($_.Length -gt 16) { $_.Substring(17) } }), [System.Text.Encoding]::UTF8)
+            [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Split("`r").ForEach({ if ($_.Length -gt 16) { $_.Substring(17) } }), [System.Text.Encoding]::UTF8)
         }
     } else {
         Remove-Item $mtTestsPath -Force
