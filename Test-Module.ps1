@@ -24,6 +24,16 @@ param (
                 throw [System.IO.InvalidDataException]::New('Please Provide a valid version')
             }
         }
+    )][ArgumentCompleter({
+            [OutputType([System.Management.Automation.CompletionResult])]
+            param([string]$CommandName, [string]$ParameterName, [string]$WordToComplete, [System.Management.Automation.Language.CommandAst]$CommandAst, [System.Collections.IDictionary]$FakeBoundParameters)
+            $CompletionResults = [System.Collections.Generic.List[System.Management.Automation.CompletionResult]]::new()
+            $b_Path = [IO.Path]::Combine($PSScriptRoot, 'BuildOutput', 'PsImport')
+            if ((Test-Path -Path $b_Path -PathType Container -ErrorAction Ignore)) {
+                [IO.DirectoryInfo]::New($b_Path).GetDirectories().Name | Where-Object { $_ -like "*$wordToComplete*" -and $_ -as 'version' -is 'version' } | ForEach-Object { [void]$CompletionResults.Add([System.Management.Automation.CompletionResult]::new($_, $_, "ParameterValue", $_)) }
+            }
+            return $CompletionResults
+        }
     )]
     [string]$version,
     [switch]$skipBuildOutputTest,
