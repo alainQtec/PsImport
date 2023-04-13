@@ -690,6 +690,7 @@ Begin {
         Process {
             $response = $null; $downloadUrl = ''; $Module_Path = ''
             try {
+                if ([bool][int]$env:IsAC) { throw }
                 # Try Using normal Installation
                 [string]$ReqVersion = if ($Version -eq 'latest') {
                     Get-LatestModuleVersion -Name $moduleName -Source PsGallery
@@ -764,8 +765,10 @@ Begin {
         process {
             if ($Source -eq 'LocalMachine') {
                 $_Local_Module = Get-LocalModule -Name $Name
-                if ((Test-Path -Path $_Local_Module.Psd1 -PathType Leaf -ErrorAction Ignore)) {
-                    $latest_Version = $_Local_Module.Version
+                if ($null -ne $_Local_Module) {
+                    if ((Test-Path -Path $_Local_Module.Psd1 -PathType Leaf -ErrorAction Ignore)) {
+                        $latest_Version = $_Local_Module.Version
+                    }
                 }
             } else {
                 $url = "https://www.powershellgallery.com/packages/$Name/?dummy=$(Get-Random)"; $request = [System.Net.WebRequest]::Create($url)
