@@ -49,9 +49,10 @@ Begin {
     $script:PSake_ScriptBlock = [scriptblock]::Create({
             # PSake makes variables declared here available in other scriptblocks
             Properties {
-                # Find the build folder based on build system
+                $ProjectName = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
+                $BuildNumber = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber')
                 $ProjectRoot = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath')
-                if (-not $ProjectRoot) {
+                if (!$ProjectRoot) {
                     if ($pwd.Path -like "*ci*") {
                         Set-Location ..
                     }
@@ -60,12 +61,12 @@ Begin {
                 $outputDir = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput')
                 $Timestamp = Get-Date -UFormat "%Y%m%d-%H%M%S"
                 $PSVersion = $PSVersionTable.PSVersion.ToString()
-                $outputModDir = [IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput'), [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))
+                $outputModDir = [IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput'), $ProjectName)
                 $tests = "$projectRoot\Tests"
                 $lines = ('-' * 70)
                 $Verbose = @{}
                 $TestFile = "TestResults_PS$PSVersion`_$TimeStamp.xml"
-                $outputModVerDir = [IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput'), [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'), [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber'))
+                $outputModVerDir = [IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput'), $ProjectName, $BuildNumber)
                 $PathSeperator = [IO.Path]::PathSeparator
                 $DirSeperator = [IO.Path]::DirectorySeparatorChar
                 if ([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage') -match "!verbose") {
@@ -91,11 +92,11 @@ Begin {
                 Set-Location $ProjectRoot
                 Write-Verbose "Build System Details:"
                 Write-Verbose "$((Get-ChildItem Env: | Where-Object {$_.Name -match "^(BUILD_|SYSTEM_|BH)"} | Sort-Object Name | Format-Table Name,Value -AutoSize | Out-String).Trim())"
-                Write-Verbose "Module Build version: $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber'))"
+                Write-Verbose "Module Build version: $BuildNumber"
             } -description 'Initialize build environment'
 
             Task clean -depends Init {
-                Remove-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')) -Force -ErrorAction SilentlyContinue
+                Remove-Module $ProjectName -Force -ErrorAction SilentlyContinue
                 if (Test-Path -Path $outputDir -PathType Container -ErrorAction SilentlyContinue) {
                     Write-Verbose "Cleaning Previous build Output ..."
                     Get-ChildItem -Path $outputDir -Recurse -Force | Remove-Item -Force -Recurse
@@ -115,7 +116,7 @@ Begin {
                         "Public"
                         "LICENSE"
                         "$($ModuleManifest.Name)"
-                        "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')).psm1"
+                        "$ProjectName.psm1"
                     ).ForEach({ Copy-Item -Recurse -Path $([IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildScriptPath')), $_)) -Destination $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModulePath')) })
                 } catch {
                     throw $_
@@ -160,14 +161,14 @@ Begin {
             Task Test -depends Init {
                 '    Importing Pester'
                 Import-Module Pester -Verbose:$false -Force -ErrorAction Stop
-                Push-Location $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'))
+                Push-Location $ProjectRoot
                 $origModulePath = $Env:PSModulePath
                 if ($Env:PSModulePath.split($pathSeperator) -notcontains $outputDir ) {
                     $Env:PSModulePath = ($outputDir + $pathSeperator + $origModulePath)
                 }
-                Remove-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')) -ErrorAction SilentlyContinue -Verbose:$false
+                Remove-Module $ProjectName -ErrorAction SilentlyContinue -Verbose:$false
                 Import-Module $outputModDir -Force -Verbose:$false
-                $test_Script = [IO.FileInfo]::New([IO.Path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectPath'), 'Test-Module.ps1'))
+                $test_Script = [IO.FileInfo]::New([IO.Path]::Combine($ProjectRoot, 'Test-Module.ps1'))
                 if (!$test_Script.Exists) { throw [System.IO.FileNotFoundException]::New($test_Script.FullName) }
                 $TestResults = & $test_Script
                 '    Pester invocation complete!'
@@ -543,71 +544,112 @@ Begin {
             [version]$version,
 
             [Parameter(Mandatory = $false, Position = 2)]
-            [ValidateSet('CurrentUser', 'Machine')]
+            [ValidateSet('CurrentUser', 'LocalMachine')]
             [string]$Scope = 'CurrentUser'
         )
         begin {
-            enum ModuleScope {
-                CurrentUser
-                Machine
-            }
             class LocalPsModule {
                 [string]$Name
                 [string]$version
-                [ModuleScope]$Scope
                 [IO.FileInfo]$Psd1
+                [string]$Scope
                 [IO.DirectoryInfo]$Path
                 [bool]$Exists = $false
+                [hashtable]$Info = @{}
                 [bool]$IsReadOnly = $false
                 [bool]$HasVersiondirs = $false
+
+                LocalPsModule([string]$Name) {
+                    $this._Init_($Name, 'CurrentUser', $null)
+                }
+                LocalPsModule([string]$Name, [string]$scope) {
+                    $this._Init_($Name, $scope, $null)
+                }
                 LocalPsModule([string]$Name, [string]$scope, [version]$version) {
-                    $this.Scope = [ModuleScope]$scope; $PsModule_Paths = [System.Environment]::GetEnvironmentVariable('PSModulePath').Split([IO.Path]::PathSeparator)
+                    $this._Init_($Name, $scope, $version)
+                }
+                static hidden [PSCustomObject] Find([string]$Name) {
+                    [ValidateNotNullOrEmpty()][string]$Name = $Name
+                    [IO.DirectoryInfo]$ModuleBase = (Get-Module -ListAvailable -Name $Name).ModuleBase
+                    if ($null -ne $ModuleBase) {
+                        return [LocalPsModule]::Find($Name, $ModuleBase)
+                    } else {
+                        return [LocalPsModule]::Find($Name, 'CurrentUser', $null)
+                    }
+                }
+                static hidden [PSCustomObject] Find([string]$Name, [IO.DirectoryInfo]$ModuleBase) {
+                    [ValidateNotNullOrEmpty()][IO.DirectoryInfo]$ModuleBase = $ModuleBase
+                    $result = [PSCustomObject]@{
+                        Name       = [string]::Empty
+                        Path       = $null
+                        Psd1       = $null
+                        Info       = @{}
+                        scope      = 'CurrentUser'
+                        Exists     = $false
+                        Version    = [version]::New()
+                        IsReadOnly = $false
+                    }
+                    $ModulePsd1 = ($ModuleBase.GetFiles().Where({ $_.Name -like "$Name*" -and $_.Extension -eq '.psd1' }))[0]
+                    if ($null -eq $ModulePsd1) { return $result }
+                    $result.Info = Import-PowerShellDataFile -Path $ModulePsd1.FullName
+                    $result.Name = $ModulePsd1.BaseName
+                    $result.Psd1 = $ModulePsd1
+                    $result.Path = if ($result.Psd1.Directory.Name -as [version] -is [version]) { $result.Psd1.Directory.Parent } else { $result.Psd1.Directory }
+                    $result.Exists = $ModulePsd1.Exists
+                    $result.Version = $result.Info.ModuleVersion -as [version]
+                    $result.IsReadOnly = $ModulePsd1.IsReadOnly
+                    return $result
+                }
+                static hidden [PSCustomObject] Find([string]$Name, [string]$scope, [version]$version) {
+                    $Module = $null; $_scope = $scope.ToString(); $_scope = if ([string]::IsNullOrWhiteSpace($_scope)) { 'CurrentUser' }else { $scope }
+                    [string[]]$PsModule_Paths = [System.Environment]::GetEnvironmentVariable('PSModulePath').Split([IO.Path]::PathSeparator)
                     if (!(Get-Variable -Name IsWindows -ErrorAction Ignore) -or $(Get-Variable IsWindows -ValueOnly)) {
                         $psv = Get-Variable PSVersionTable -ValueOnly
                         $module_folder = if ($psv.ContainsKey('PSEdition') -and $psv.PSEdition -eq 'Core') { 'PowerShell' } else { 'WindowsPowerShell' }
                         $allUsers_path = Join-Path -Path $env:ProgramFiles -ChildPath $module_folder
                         $curr_UserPath = Join-Path -Path $([System.Environment]::GetFolderPath('MyDocuments')) -ChildPath $module_folder
-                        $PsModule_Paths = $PsModule_Paths.Where({ if ($Scope.ToString() -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" } else { $_ -notlike "*$curr_UserPath*" } })
+                        $PsModule_Paths = $PsModule_Paths.Where({ if ($_Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" } else { $_ -notlike "*$curr_UserPath*" } })
                     } else {
                         $allUsers_path = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('SHARED_MODULES')) -Parent
                         $curr_UserPath = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('USER_MODULES')) -Parent
-                        $PsModule_Paths = $PsModule_Paths.Where({ if ($Scope.ToString() -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" } else { $_ -notlike "*$curr_UserPath*" } })
+                        $PsModule_Paths = $PsModule_Paths.Where({ if ($_Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" } else { $_ -notlike "*$curr_UserPath*" } })
                     }
-                    $PsModule_Paths = ($PsModule_Paths -as [IO.DirectoryInfo[]] | Where-Object { $_.Exists }).GetDirectories().Where({ $_.Name -eq $Name });
+                    $PsModule_Paths = ($PsModule_Paths | ForEach-Object { [IO.DirectoryInfo]::New("$_") } | Where-Object { $_.Exists }).GetDirectories().Where({ $_.Name -eq $Name });
                     if ($PsModule_Paths.count -gt 0) {
                         $Get_versionDir = [scriptblock]::Create('param([IO.DirectoryInfo[]]$direcrory) return ($direcrory | ForEach-Object { $_.GetDirectories() | Where-Object { $_.Name -as [version] -is [version] } })')
-                        $AllModulePsd1s = $PsModule_Paths.Foreach({
-                                if ($Get_versionDir.Invoke($PsModule_Paths).count -gt 0) {
-                                    [string]$MaxVersion = ($Get_versionDir.Invoke($_) | Select-Object @{l = 'version'; e = { $_.BaseName -as [version] } } | Measure-Object -Property version -Maximum).Maximum
-                                    [IO.Path]::Combine($_.FullName, $MaxVersion, $_.BaseName + '.psd1')
-                                } else {
-                                    [IO.Path]::Combine($_.FullName, $_.BaseName + '.psd1')
-                                }
+                        $has_versionDir = $Get_versionDir.Invoke($PsModule_Paths).count -gt 0
+                        $ModulePsdFiles = [IO.FileInfo[]]$PsModule_Paths | ForEach-Object {
+                            if ($has_versionDir) {
+                                [string]$MaxVersion = ($Get_versionDir.Invoke([IO.DirectoryInfo]::New("$_")) | Select-Object @{l = 'version'; e = { $_.BaseName -as [version] } } | Measure-Object -Property version -Maximum).Maximum
+                                [IO.FileInfo]::New([IO.Path]::Combine("$_", $MaxVersion, $_.BaseName + '.psd1'))
+                            } else {
+                                [IO.FileInfo]::New([IO.Path]::Combine("$_", $_.BaseName + '.psd1'))
                             }
-                        )
-                        $AllModulePsd1s = $AllModulePsd1s -as [IO.FileInfo[]] | Where-Object { $_.Exists } | Select-Object BaseName, Name, Exists, IsReadOnly, FullName, @{l = 'Info'; e = { [scriptblock]::Create("$([IO.File]::ReadAllText($_.FullName))").Invoke() } }
-                        $AllModulePsd1s = $AllModulePsd1s | Select-Object *, @{l = 'version'; e = { $_.Info.ModuleVersion } }
-                        $res = if ($null -eq $version) {
-                            $AllModulePsd1s | Sort-Object -Property version -Descending | Select-Object -First 1
+                        } | Where-Object { $_.Exists }
+                        $Req_ModulePsd1 = if ($null -eq $version) {
+                            $ModulePsdFiles | Sort-Object -Property version -Descending | Select-Object -First 1
                         } else {
-                            $AllModulePsd1s | Where-Object { $_.version -eq $version }
-                        }; $this.version = $res.version; $this.Exists = $res.Exists; $this.IsReadOnly = $res.IsReadOnly
-                        $this.Name = $res.BaseName
-                        $this.Psd1 = $res.FullName -as [IO.FileInfo]
-                        $this.Path = if ($this.Psd1.Directory.Name -as [version] -is [version]) { $this.Psd1.Directory.Parent } else { $this.Psd1.Directory }
-                    } else {
-                        $this.Name = $Name
-                        $this.Psd1 = $null
-                        $this.Path = $null
+                            $ModulePsdFiles | Where-Object { (Import-PowerShellDataFile -Path $_.FullName).ModuleVersion -eq $version }
+                        }
+                        $Module = [LocalPsModule]::Find($Req_ModulePsd1.Name, $Req_ModulePsd1.Directory)
                     }
+                    return $Module
+                }
+                hidden _Init_ ([string]$Name, [string]$scope, [version]$version) {
+                    $Module = $this::Find($Name, $scope, $version); $this.IsReadOnly = $Module.IsReadOnly;
+                    $this.version = $Module.version; $this.Exists = $Module.Exists; $this.Scope = $Module.Scope
+                    $this.Path = $Module.Path
+                    $this.Psd1 = $Module.Psd1
+                    $this.Name = $Module.Name
+                    $this.Info = $Module.Info
                 }
             }
         }
         end {
             if ($PSCmdlet.MyInvocation.BoundParameters.ContainsKey('version')) {
-                return [LocalPsModule]::New($Name, $Scope, $version)
+                return New-Object LocalPsModule($Name, $Scope, $version)
             } else {
-                return [LocalPsModule]::New($Name, $Scope, $null)
+                New-Object LocalPsModule($Name, $Scope, $null)
             }
         }
     }
@@ -634,7 +676,7 @@ Begin {
             [string]$version,
 
             [Parameter(Mandatory = $false, Position = 2)]
-            [ValidateSet('CurrentUser', 'Machine')]
+            [ValidateSet('CurrentUser', 'LocalMachine')]
             [string]$Scope = 'CurrentUser'
         )
         if ($PSCmdlet.MyInvocation.BoundParameters.ContainsKey('version')) {
@@ -644,10 +686,19 @@ Begin {
         }
     }
     function Install-PsGalleryModule {
-        # .SYNOPSIS
-        # Installs a PowerShell module even on systems that don't have a working PowerShellGet.
-        # .DESCRIPTION
-
+        #  .SYNOPSIS
+        #     Like install-Module but it manually installs the module when the normal way fails.
+        #  .DESCRIPTION
+        #     Installs a PowerShell module even on systems that don't have a working PowerShellGet.
+        #     But Sometimes you just need to apply a quick fix like this one:
+        #
+        #     Unregister-PSRepository -Name PSGallery
+        #     Register-PSRepository -Default
+        #     if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
+        #         Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+        #     }
+        #
+        #     When all that fails, then this function comes in handy.
         [CmdletBinding()]
         [OutputType([IO.FileInfo])]
         param (
@@ -659,7 +710,7 @@ Begin {
             [Parameter(Mandatory = $false)]
             [ValidateScript({ ($_ -as 'version') -is [version] -or $_ -eq 'latest' })]
             [string]$Version = 'latest',
-
+            [switch]$UpdateOnly,
             [switch]$Passthru
         )
         Begin {
@@ -689,20 +740,9 @@ Begin {
             )
         }
         Process {
-            $response = $null; $downloadUrl = ''; $Module_Path = ''
-            try {
-                if ([bool][int]$env:IsAC) { throw }
-                # Try Using normal Installation
-                [string]$ReqVersion = if ($Version -eq 'latest') {
-                    Get-LatestModuleVersion -Name $moduleName -Source PsGallery
-                } else {
-                    $Version
-                }
-                Install-Module -Name $moduleName -RequiredVersion $ReqVersion -Force -ErrorAction Ignore | Out-Null
-                $Module_Path = (Get-LocalModule -Name $moduleName).Psd1 | Split-Path -ErrorAction Stop
-            } catch {
-                # For some reason Install-Module can fail (ex: on Arch). This is a manual workaround to narrow down the sourse of errors.
-                # Do it Manually:
+            $response = $null; $downloadUrl = ''; $Module_Path = ''; [string]$ReqVersion = $Version
+            trap {
+                # For some reason Install-Module can fail (ex: on Arch). This is a manual workaround when that happens.
                 $version_filter = if ($Version -eq 'latest') { 'IsLatestVersion' } else { "Version eq '$Version'" }
                 $url = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$moduleName' and $version_filter"
                 try {
@@ -743,6 +783,14 @@ Begin {
                     Remove-Item -LiteralPath $Item.FullName -Recurse:$Recurse -Force -ErrorAction SilentlyContinue
                 }
             }
+            # Try Using normal Installation
+            if ($Version -eq 'latest') { [string]$ReqVersion = Get-LatestModuleVersion -Name $moduleName -Source PsGallery }
+            if ($UpdateOnly.IsPresent) {
+                Update-Module -Name $moduleName -RequiredVersion $ReqVersion -Force | Out-Null
+            } else {
+                Install-Module -Name $moduleName -RequiredVersion $ReqVersion -Force -ErrorAction Ignore | Out-Null
+            }
+            $Module_Path = (Get-LocalModule -Name $moduleName).Psd1 | Split-Path -ErrorAction Stop
         }
 
         end {
@@ -829,7 +877,7 @@ Begin {
                     Install-PsGalleryModule -Name $moduleName
                 } elseif ($Local_ModuleVersion -lt $Latest_ModuleVerion -and $UpdateModule.IsPresent) {
                     Write-Verbose -Message "Updating $moduleName from version $Local_ModuleVersion to version [$Latest_ModuleVerion] ..."
-                    Install-PsGalleryModule -Name $moduleName -Version $Latest_ModuleVerion
+                    Install-PsGalleryModule -Name $moduleName -Version $Latest_ModuleVerion -UpdateOnly
                 } else {
                     Write-Verbose -Message "Module $moduleName is already Installed and Up-to-date."
                 }
@@ -1187,14 +1235,16 @@ Process {
         }
     }
     Write-Heading "Prepare package feeds"
-    Unregister-PSRepository -Name PSGallery -Verbose:$false
-    Register-PSRepository -Default
+    if ($null -eq (Get-PSRepository -Name PSGallery -ErrorAction Ignore)) {
+        Unregister-PSRepository -Name PSGallery -Verbose:$false -ErrorAction Ignore
+        Register-PSRepository -Default -InstallationPolicy Trusted
+    }
     if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
         Invoke-CommandWithLog { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -Verbose:$false }
     }
-    if ((Get-Command dotnet -ErrorAction Ignore) -and ([bool](Get-Variable -Name IsWindows -ErrorAction Ignore) -and !$(Get-Variable IsWindows -ValueOnly))) {
-        dotnet dev-certs https --trust
-    }
+    # if ((Get-Command dotnet -ErrorAction Ignore) -and ([bool](Get-Variable -Name IsWindows -ErrorAction Ignore) -and !$(Get-Variable IsWindows -ValueOnly))) {
+    #     dotnet dev-certs https --trust
+    # }
     Invoke-CommandWithLog { Get-PackageProvider -Name Nuget -ForceBootstrap -Verbose:$false }
     if (!(Get-PackageProvider -Name Nuget)) {
         Invoke-CommandWithLog { Install-PackageProvider -Name NuGet -Force | Out-Null }
