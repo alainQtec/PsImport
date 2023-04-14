@@ -530,8 +530,12 @@ Begin {
         }
     }
     function Get-LocalModule {
+        # .SYNOPSIS
+        # Gets basic details of an Installed Psmodule
         # .DESCRIPTION
-        # Like Get-InstalledModule but can find even unregistered packages (as long as they are in any of $env:PsmodulePath folders)
+        # Its like using Get-InstalledModule but you can even find unregistered packages (as long as they are in any of $env:PsmodulePath folders)
+        # .EXAMPLE
+        # Get-LocalModule psake | Select-Object -ExpandProperty Path | Import-Module -Verbose
         [CmdletBinding()]
         [OutputType([LocalPsModule])]
         param (
@@ -545,9 +549,10 @@ Begin {
 
             [Parameter(Mandatory = $false, Position = 2)]
             [ValidateSet('CurrentUser', 'LocalMachine')]
-            [string]$Scope = 'CurrentUser'
+            [string]$Scope
         )
         begin {
+            $PsModule = $null
             class LocalPsModule {
                 [string]$Name
                 [string]$version
@@ -560,17 +565,32 @@ Begin {
                 [bool]$HasVersiondirs = $false
 
                 LocalPsModule([string]$Name) {
-                    $this._Init_($Name, 'CurrentUser', $null)
+                    $ModuleBase = $null; $AvailModls = Get-Module -ListAvailable -Name $Name -ErrorAction Ignore
+                    if ($null -ne $AvailModls) { $ModuleBase = ($AvailModls.ModuleBase -as [string[]])[0] }
+                    if ($null -ne $ModuleBase) {
+                        $Module = $this::Find($Name, [IO.DirectoryInfo]::New($ModuleBase))
+                        $this.IsReadOnly = $Module.IsReadOnly; $this.version = $Module.version;
+                        $this.Exists = $Module.Exists; $this.Scope = $Module.Scope
+                        $this.Path = $Module.Path
+                        $this.Psd1 = $Module.Psd1
+                        $this.Name = $Module.Name
+                        $this.Info = $Module.Info
+                    } else {
+                        $this._Init_($Name, 'CurrentUser', $null)
+                    }
                 }
                 LocalPsModule([string]$Name, [string]$scope) {
                     $this._Init_($Name, $scope, $null)
+                }
+                LocalPsModule([string]$Name, [version]$version) {
+                    $this._Init_($Name, $null, $version)
                 }
                 LocalPsModule([string]$Name, [string]$scope, [version]$version) {
                     $this._Init_($Name, $scope, $version)
                 }
                 static hidden [PSCustomObject] Find([string]$Name) {
                     [ValidateNotNullOrEmpty()][string]$Name = $Name
-                    $ModuleBase = (Get-Module -ListAvailable -Name $Name -ErrorAction Ignore).ModuleBase
+                    $ModuleBase = (Get-Module -ListAvailable -Name $Name -ErrorAction Ignore).ModuleBase[0]
                     if ($null -ne $ModuleBase) {
                         return [LocalPsModule]::Find($Name, [IO.DirectoryInfo]::New($ModuleBase))
                     } else {
@@ -601,20 +621,13 @@ Begin {
                     return $result
                 }
                 static hidden [PSCustomObject] Find([string]$Name, [string]$scope, [version]$version) {
-                    $Module = $null; $_scope = $scope.ToString(); $_scope = if ([string]::IsNullOrWhiteSpace($_scope)) { 'CurrentUser' }else { $scope }
-                    [string[]]$PsModule_Paths = [System.Environment]::GetEnvironmentVariable('PSModulePath').Split([IO.Path]::PathSeparator)
-                    if (!(Get-Variable -Name IsWindows -ErrorAction Ignore) -or $(Get-Variable IsWindows -ValueOnly)) {
-                        $psv = Get-Variable PSVersionTable -ValueOnly
-                        $module_folder = if ($psv.ContainsKey('PSEdition') -and $psv.PSEdition -eq 'Core') { 'PowerShell' } else { 'WindowsPowerShell' }
-                        $allUsers_path = Join-Path -Path $env:ProgramFiles -ChildPath $module_folder
-                        $curr_UserPath = Join-Path -Path $([System.Environment]::GetFolderPath('MyDocuments')) -ChildPath $module_folder
-                        $PsModule_Paths = $PsModule_Paths.Where({ if ($_Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" } else { $_ -notlike "*$curr_UserPath*" } })
-                    } else {
-                        $allUsers_path = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('SHARED_MODULES')) -Parent
-                        $curr_UserPath = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('USER_MODULES')) -Parent
-                        $PsModule_Paths = $PsModule_Paths.Where({ if ($_Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" } else { $_ -notlike "*$curr_UserPath*" } })
-                    }
-                    $PsModule_Paths = ($PsModule_Paths | ForEach-Object { [IO.DirectoryInfo]::New("$_") } | Where-Object { $_.Exists }).GetDirectories().Where({ $_.Name -eq $Name });
+                    $Module = $null; $PsModule_Paths = $([LocalPsModule]::Get_Module_Paths($(
+                                if ([string]::IsNullOrWhiteSpace($scope)) { 'CurrentUser' } else {
+                                    $scope
+                                }
+                            )
+                        ) | ForEach-Object { [IO.DirectoryInfo]::New("$_") } | Where-Object { $_.Exists }
+                    ).GetDirectories().Where({ $_.Name -eq $Name });
                     if ($PsModule_Paths.count -gt 0) {
                         $Get_versionDir = [scriptblock]::Create('param([IO.DirectoryInfo[]]$direcrory) return ($direcrory | ForEach-Object { $_.GetDirectories() | Where-Object { $_.Name -as [version] -is [version] } })')
                         $has_versionDir = $Get_versionDir.Invoke($PsModule_Paths).count -gt 0
@@ -635,7 +648,28 @@ Begin {
                     }
                     return $Module
                 }
+                static [string] Get_Module_Paths() {
+                    return [LocalPsModule]::Get_Module_Paths($null)
+                }
+                static [string] Get_Module_Paths([string]$scope) {
+                    [string[]]$_Module_Paths = [System.Environment]::GetEnvironmentVariable('PSModulePath').Split([IO.Path]::PathSeparator)
+                    if ([string]::IsNullOrWhiteSpace($scope)) { return $_Module_Paths }
+                    [ValidateSet('CurrentUser', 'LocalMachine')][string]$scope = $scope
+                    if (!(Get-Variable -Name IsWindows -ErrorAction Ignore) -or $(Get-Variable IsWindows -ValueOnly)) {
+                        $psv = Get-Variable PSVersionTable -ValueOnly
+                        $module_folder = if ($psv.ContainsKey('PSEdition') -and $psv.PSEdition -eq 'Core') { 'PowerShell' } else { 'WindowsPowerShell' }
+                        $allUsers_path = Join-Path -Path $env:ProgramFiles -ChildPath $module_folder
+                        $curr_UserPath = Join-Path -Path $([System.Environment]::GetFolderPath('MyDocuments')) -ChildPath $module_folder
+                        $_Module_Paths = $_Module_Paths.Where({ if ($Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" } else { $_ -notlike "*$curr_UserPath*" -or $_ -like "*$env:SystemRoot*" } })
+                    } else {
+                        $allUsers_path = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('SHARED_MODULES')) -Parent
+                        $curr_UserPath = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('USER_MODULES')) -Parent
+                        $_Module_Paths = $_Module_Paths.Where({ if ($Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" } else { $_ -notlike "*$curr_UserPath*" -or $_ -like "*/var/lib/*" } })
+                    }
+                    return $_Module_Paths
+                }
                 hidden _Init_ ([string]$Name, [string]$scope, [version]$version) {
+                    [ValidateSet('CurrentUser', 'LocalMachine')][string]$scope = $scope
                     $Module = $this::Find($Name, $scope, $version); $this.IsReadOnly = $Module.IsReadOnly;
                     $this.version = $Module.version; $this.Exists = $Module.Exists; $this.Scope = $Module.Scope
                     $this.Path = $Module.Path
@@ -645,12 +679,17 @@ Begin {
                 }
             }
         }
-        end {
-            if ($PSCmdlet.MyInvocation.BoundParameters.ContainsKey('version')) {
-                return New-Object LocalPsModule($Name, $Scope, $version)
-            } else {
-                New-Object LocalPsModule($Name, $Scope, $null)
+        process {
+            $PsModule = switch ($true) {
+                $($PSBoundParameters.ContainsKey('version') -and $PSBoundParameters.ContainsKey('Scope')) { New-Object LocalPsModule($Name, $Scope, $version) ; break }
+                $($PSBoundParameters.ContainsKey('version') -and !$PSBoundParameters.ContainsKey('Scope')) { New-Object LocalPsModule($Name, 'LocalMachine', $version) ; break }
+                $(!$PSBoundParameters.ContainsKey('version') -and $PSBoundParameters.ContainsKey('Scope')) { New-Object LocalPsModule($Name, $Scope, $version) ; break }
+                $(!$PSBoundParameters.ContainsKey('version') -and !$PSBoundParameters.ContainsKey('Scope')) { New-Object LocalPsModule($Name) ; break }
+                Default { New-Object LocalPsModule($Name) }
             }
+        }
+        end {
+            return $PsModule
         }
     }
     function Get-ModulePath {
