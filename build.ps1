@@ -570,9 +570,9 @@ Begin {
                 }
                 static hidden [PSCustomObject] Find([string]$Name) {
                     [ValidateNotNullOrEmpty()][string]$Name = $Name
-                    [IO.DirectoryInfo]$ModuleBase = (Get-Module -ListAvailable -Name $Name).ModuleBase
+                    $ModuleBase = (Get-Module -ListAvailable -Name $Name -ErrorAction Ignore).ModuleBase
                     if ($null -ne $ModuleBase) {
-                        return [LocalPsModule]::Find($Name, $ModuleBase)
+                        return [LocalPsModule]::Find($Name, [IO.DirectoryInfo]::New($ModuleBase))
                     } else {
                         return [LocalPsModule]::Find($Name, 'CurrentUser', $null)
                     }
@@ -714,11 +714,6 @@ Begin {
             [switch]$Passthru
         )
         Begin {
-            # Enable TLS1.1/TLS1.2 if they're available but disabled (eg. .NET 4.5)
-            $security_protocols = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::SystemDefault
-            if ([Net.SecurityProtocolType].GetMember("Tls11").Count -gt 0) { $security_protocols = $security_protocols -bor [Net.SecurityProtocolType]::Tls11 }
-            if ([Net.SecurityProtocolType].GetMember("Tls12").Count -gt 0) { $security_protocols = $security_protocols -bor [Net.SecurityProtocolType]::Tls12 }
-            [Net.ServicePointManager]::SecurityProtocol = $security_protocols
             $Get_Install_Path = [scriptblock]::Create({
                     param([string]$Name, [string]$ReqVersion)
                     $p = [IO.DirectoryInfo][IO.Path]::Combine(
@@ -738,10 +733,43 @@ Begin {
                     }
                 }
             )
+            [int]$ret = 0; $response = $null; $downloadUrl = ''; $Module_Path = ''
+            $InstallModule = [scriptblock]::Create({
+                    if ($Version -eq 'latest') {
+                        Install-Module -Name $moduleName
+                    } else {
+                        Install-Module -Name $moduleName -RequiredVersion $Version
+                    }
+                }
+            )
+            $UpdateModule = [scriptblock]::Create({
+                    try {
+                        if ($Version -eq 'latest') {
+                            Update-Module -Name $moduleName
+                        } else {
+                            Update-Module -Name $moduleName -RequiredVersion $Version
+                        }
+                    } catch {
+                        if ($ret -lt 1 -and $_.ErrorRecord.Exception.Message -eq "Module '$moduleName' was not installed by using Install-Module, so it cannot be updated.") {
+                            Get-Module $moduleName | Remove-Module -Force; $ret++
+                            $UpdateModule.Invoke()
+                        }
+                    }
+                }
+            )
         }
         Process {
-            $response = $null; $downloadUrl = ''; $Module_Path = ''; [string]$ReqVersion = $Version
-            trap {
+            # Try Using normal Installation
+            try {
+                if ($PSCmdlet.MyInvocation.BoundParameters['UpdateOnly']) {
+                    $UpdateModule.Invoke()
+                } else {
+                    $InstallModule.Invoke()
+                }
+                $Module_Path = (Get-LocalModule -Name $moduleName).Psd1 | Split-Path -ErrorAction Stop
+            } catch {
+                throw $_
+                break
                 # For some reason Install-Module can fail (ex: on Arch). This is a manual workaround when that happens.
                 $version_filter = if ($Version -eq 'latest') { 'IsLatestVersion' } else { "Version eq '$Version'" }
                 $url = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$moduleName' and $version_filter"
@@ -769,9 +797,9 @@ Begin {
                         )
                     )
                 }
-                Write-Host "Installing $moduleName ... " -NoNewline -ForegroundColor DarkCyan
                 if (!(Test-Path -Path $Module_Path -PathType Container -ErrorAction Ignore)) { New-Directory -Path $Module_Path }
                 $ModuleNupkg = [IO.Path]::Combine($Module_Path, "$moduleName.nupkg")
+                Write-Host "Download $moduleName.nupkg ... " -NoNewline -ForegroundColor DarkCyan
                 Invoke-WebRequest -Uri $downloadUrl -OutFile $ModuleNupkg -Verbose:$false;
                 if ($IsWindows) { Unblock-File -Path $ModuleNupkg }
                 Expand-Archive $ModuleNupkg -DestinationPath $Module_Path -Verbose:$false -Force
@@ -783,14 +811,6 @@ Begin {
                     Remove-Item -LiteralPath $Item.FullName -Recurse:$Recurse -Force -ErrorAction SilentlyContinue
                 }
             }
-            # Try Using normal Installation
-            if ($Version -eq 'latest') { [string]$ReqVersion = Get-LatestModuleVersion -Name $moduleName -Source PsGallery }
-            if ($UpdateOnly.IsPresent) {
-                Update-Module -Name $moduleName -RequiredVersion $ReqVersion -Force | Out-Null
-            } else {
-                Install-Module -Name $moduleName -RequiredVersion $ReqVersion -Force -ErrorAction Ignore | Out-Null
-            }
-            $Module_Path = (Get-LocalModule -Name $moduleName).Psd1 | Split-Path -ErrorAction Stop
         }
 
         end {
@@ -870,7 +890,7 @@ Begin {
                 $Local_ModuleVersion = Get-LatestModuleVersion -Name $moduleName -Source LocalMachine
                 $Latest_ModuleVerion = Get-LatestModuleVersion -Name $moduleName -Source PsGallery
                 if (!$Latest_ModuleVerion -or $Latest_ModuleVerion -eq ([version]::New())) {
-                    $PSCmdlet.ThrowTerminatingError([System.Management.Automation.ErrorRecord]::new([System.Data.OperationAbortedException]::New(" Get-LatestModuleVersion: Failed to find latest module version for '$moduleName'."), 'OperationStopped', [System.Management.Automation.ErrorCategory]::OperationStopped, $moduleName))
+                    throw [System.Data.OperationAbortedException]::New("Resolve-Module: Get-LatestModuleVersion: Failed to find latest module version for '$moduleName'.")
                 }
                 if (!$Local_ModuleVersion -or $Local_ModuleVersion -eq ([version]::New())) {
                     Write-Verbose -Message "Installing $moduleName ..."
@@ -1222,7 +1242,9 @@ Process {
     }
     Set-BuildVariables -Path $PSScriptRoot -Prefix $env:RUN_ID
     Write-EnvironmentSummary "Build started"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $security_protocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::SystemDefault
+    if ([Net.SecurityProtocolType].GetMember("Tls12").Count -gt 0) { $security_protocol = $security_protocol -bor [Net.SecurityProtocolType]::Tls12 }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]$security_protocol
     $host.ui.WriteLine()
     Invoke-CommandWithLog { $script:DefaultParameterValues = @{
             '*-Module:Verbose'           = $false
