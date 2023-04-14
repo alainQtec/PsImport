@@ -561,17 +561,18 @@ Begin {
                 [bool]$IsReadOnly = $false
                 [bool]$HasVersiondirs = $false
                 LocalPsModule([string]$Name, [string]$scope, [version]$version) {
-                    $this.Scope = [ModuleScope]$scope
+                    $this.Scope = [ModuleScope]$scope; $PsModule_Paths = [System.Environment]::GetEnvironmentVariable('PSModulePath').Split([IO.Path]::PathSeparator)
                     if (!(Get-Variable -Name IsWindows -ErrorAction Ignore) -or $(Get-Variable IsWindows -ValueOnly)) {
                         $psv = Get-Variable PSVersionTable -ValueOnly
                         $module_folder = if ($psv.ContainsKey('PSEdition') -and $psv.PSEdition -eq 'Core') { 'PowerShell' } else { 'WindowsPowerShell' }
                         $allUsers_path = Join-Path -Path $env:ProgramFiles -ChildPath $module_folder
                         $curr_UserPath = Join-Path -Path $([System.Environment]::GetFolderPath('MyDocuments')) -ChildPath $module_folder
+                        $PsModule_Paths = $PsModule_Paths.Where({ if ($Scope.ToString() -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" } else { $_ -notlike "*$curr_UserPath*" } })
                     } else {
                         $allUsers_path = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('SHARED_MODULES')) -Parent
                         $curr_UserPath = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('USER_MODULES')) -Parent
+                        $PsModule_Paths = $PsModule_Paths.Where({ if ($Scope.ToString() -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" } else { $_ -notlike "*$curr_UserPath*" } })
                     }
-                    $PsModule_Paths = [System.Environment]::GetEnvironmentVariable('PSModulePath').Split([IO.Path]::PathSeparator).Where({ if ($Scope.ToString() -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" } else { $_ -notlike "*$curr_UserPath*" } })
                     $PsModule_Paths = ($PsModule_Paths -as [IO.DirectoryInfo[]] | Where-Object { $_.Exists }).GetDirectories().Where({ $_.Name -eq $Name });
                     if ($PsModule_Paths.count -gt 0) {
                         $Get_versionDir = [scriptblock]::Create('param([IO.DirectoryInfo[]]$direcrory) return ($direcrory | ForEach-Object { $_.GetDirectories() | Where-Object { $_.Name -as [version] -is [version] } })')
@@ -1164,8 +1165,16 @@ Begin {
     #endregion BuildHelper_Functions
 }
 Process {
+    if ($Help) {
+        Write-Heading "Getting help"
+        Write-BuildLog -c '"psake" | Resolve-Module @Mod_Res -Verbose'
+        Resolve-Module -Name 'psake' -Verbose:$false
+        Get-PSakeScriptTasks -buildFile $Psake_BuildFile.FullName | Sort-Object -Property Name | Format-Table -Property Name, Description, Alias, DependsOn
+        exit 0
+    }
     Set-BuildVariables -Path $PSScriptRoot -Prefix $env:RUN_ID
     Write-EnvironmentSummary "Build started"
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $host.ui.WriteLine()
     Invoke-CommandWithLog { $script:DefaultParameterValues = @{
             '*-Module:Verbose'           = $false
@@ -1177,25 +1186,23 @@ Process {
             'Install-Module:Verbose'     = $false
         }
     }
-    Write-Heading "Update package feeds"
-    foreach ($Name in @('PackageManagement', 'PowerShellGet')) {
-        Write-BuildLog "Updating $Name ..."
-        Resolve-Module -Name $Name -UpdateModule -Verbose:$script:DefaultParameterValues['*-Module:Verbose'] -ErrorAction Stop
+    Write-Heading "Prepare package feeds"
+    Unregister-PSRepository -Name PSGallery -Verbose:$false
+    Register-PSRepository -Default
+    if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
+        Invoke-CommandWithLog { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -Verbose:$false }
+    }
+    if ((Get-Command dotnet -ErrorAction Ignore) -and ([bool](Get-Variable -Name IsWindows -ErrorAction Ignore) -and !$(Get-Variable IsWindows -ValueOnly))) {
+        dotnet dev-certs https --trust
     }
     Invoke-CommandWithLog { Get-PackageProvider -Name Nuget -ForceBootstrap -Verbose:$false }
     if (!(Get-PackageProvider -Name Nuget)) {
         Invoke-CommandWithLog { Install-PackageProvider -Name NuGet -Force | Out-Null }
     }
     $null = Import-PackageProvider -Name NuGet -Force
-    if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
-        Invoke-CommandWithLog { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -Verbose:$false }
-    }
-    if ($Help) {
-        Write-Heading "Getting help"
-        Write-BuildLog -c '"psake" | Resolve-Module @Mod_Res -Verbose'
-        Resolve-Module -Name 'psake' -Verbose
-        Get-PSakeScriptTasks -buildFile $Psake_BuildFile.FullName | Sort-Object -Property Name | Format-Table -Property Name, Description, Alias, DependsOn
-        exit 0
+    foreach ($Name in @('PackageManagement', 'PowerShellGet')) {
+        Write-BuildLog "Update module $Name ..."
+        Resolve-Module -Name $Name -UpdateModule -Verbose:$script:DefaultParameterValues['*-Module:Verbose'] -ErrorAction Stop
     }
     Write-Heading "Finalizing build Prerequisites and Resolving dependencies ..."
     if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem')) -eq 'VSTS') {
@@ -1238,12 +1245,13 @@ Process {
     } else {
         Invoke-Command -ScriptBlock $PSake_Build
         Write-BuildLog "Create a 'local' repository"
-        $RepoPath = New-Item -Path "$([IO.Path]::Combine($Env:USERPROFILE, 'LocalPSRepo'))" -ItemType Directory -Force
-        Register-PSRepository LocalPSRepo -SourceLocation "$RepoPath" -PublishLocation "$RepoPath" -InstallationPolicy Trusted -ErrorAction SilentlyContinue -Verbose:$false
+        $RepoPath = [IO.Path]::Combine([environment]::GetEnvironmentVariable("HOME"), 'LocalPSRepo')
+        New-Item -Path "$RepoPath" -ItemType Directory -Force -ErrorAction Ignore | Out-Null
+        Invoke-Command -ScriptBlock ([scriptblock]::Create("Register-PSRepository LocalPSRepo -SourceLocation '$RepoPath' -PublishLocation '$RepoPath' -InstallationPolicy Trusted -Verbose:`$false; Register-PackageSource -Name LocalPsRepo -Location '$RepoPath' -Trusted -ProviderName Bootstrap")) -ErrorAction Ignore
         Write-Verbose "Verify that the new repository was created successfully"
         $PsRepo = Get-PSRepository LocalPSRepo -Verbose:$false
-        if (-not (Test-Path -Path ($PsRepo.SourceLocation) -PathType Container -ErrorAction SilentlyContinue -Verbose:$false)) {
-            New-Item -Path $PsRepo.SourceLocation -ItemType Directory -Force | Out-Null
+        if (!(Test-Path -Path ($PsRepo.SourceLocation) -PathType Container -ErrorAction Ignore)) {
+            New-Directory -Path $PsRepo.SourceLocation | Out-Null
         }
         $ModuleName = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
         $ModulePath = [IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput')), $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')), $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber')))
@@ -1273,11 +1281,12 @@ Process {
             Uninstall-Module $ModuleName -ErrorAction Ignore
             Remove-Item -Path (Get-InstalledModule -Name $ModuleName).InstalledLocation -Recurse -Force -ErrorAction Ignore
         }
-        $Local_PSRepo = [IO.DirectoryInfo]::new([IO.Path]::Combine($Env:USERPROFILE, 'LocalPSRepo'))
+        $Local_PSRepo = [IO.DirectoryInfo]::new("$RepoPath")
         if ($Local_PSRepo.Exists) {
+            Write-BuildLog "Remove 'local' repository"
             Remove-Item "$Local_PSRepo" -Force -Recurse
             if ($null -ne (Get-PSRepository -Name 'LocalPSRepo' -ErrorAction Ignore)) {
-                Unregister-PSRepository 'LocalPSRepo' -Verbose
+                Invoke-Command -ScriptBlock ([ScriptBlock]::Create("Unregister-PSRepository -Name 'LocalPSRepo' -Verbose -ErrorAction Ignore"))
             }
         }
     }

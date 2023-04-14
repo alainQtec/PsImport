@@ -403,6 +403,7 @@ FodyWeavers.xsd
 
 # Generated files:
 BuildOutput/
+LocalPSRepo/
 Tests/results.xml
 Tests/Resources/
 Tests/PsImport.Module.Tests.ps1
