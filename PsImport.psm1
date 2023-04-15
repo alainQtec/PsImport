@@ -45,19 +45,20 @@ Class PsImport {
         # $j = ",`n"; Write-Debug "Paths: $($FilePaths -join $j)" -Debug
         # Validate paths and select only those which can be resolved
         $_FilePaths = @(); foreach ($path in $FilePaths) {
-            if ([string]::IsNullOrWhiteSpace($Path)) { continue };
-            $uri = $path -as 'Uri'; if ($uri -isnot [Uri]) {
-                throw [System.InvalidOperationException]::New("Could not import from '$path'. Please use a valid url.")
-            }
-            if ($uri.Scheme -notin ("file", "https")) {
-                throw [System.IO.InvalidDataException]::New("'$($uri.AbsoluteUri)' is not a valid filePath or HTTPS URL. ie uri.scheme = $($uri.Scheme)")
-            }
-            if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
-                $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
-                [void][PsImport]::DownloadFile($uri, $outFile.FullName);
-                $_FilePaths += $outFile.FullName;
-            } else {
-                $_FilePaths += Resolve-FilePath -Path $path -throwOnFailure:$throwOnFailure -NoAmbiguous
+            if (![string]::IsNullOrWhiteSpace("$Path")) {
+                $uri = $path -as 'Uri'; if ($uri -isnot [Uri]) {
+                    throw [System.InvalidOperationException]::New("Could not import from '$path'. Please use a valid url.")
+                }
+                if ($uri.Scheme -notin ("file", "https")) {
+                    throw [System.IO.InvalidDataException]::New("'$($uri.AbsoluteUri)' is not a valid filePath or HTTPS URL. ie uri.scheme = $($uri.Scheme)")
+                }
+                if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
+                    $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
+                    [void][PsImport]::DownloadFile($uri, $outFile.FullName);
+                    $_FilePaths += $outFile.FullName;
+                } else {
+                    $_FilePaths += Resolve-FilePath -Path $path -throwOnFailure:$throwOnFailure -NoAmbiguous
+                }
             }
         }
         [ValidateNotNullOrEmpty()][string[]]$_FilePaths = $_FilePaths
