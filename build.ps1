@@ -533,20 +533,24 @@ Begin {
         # .SYNOPSIS
         # Gets basic details of an Installed Psmodule
         # .DESCRIPTION
-        # Its like using Get-InstalledModule but you can even find unregistered packages (as long as they are in any of $env:PsmodulePath folders)
+        # Its like using Get-InstalledModule but you can even find unregistered/"manually Installed" modules. (as long as they are in any of $env:PsmodulePath folders)
         # .EXAMPLE
         # Get-LocalModule psake | Select-Object -ExpandProperty Path | Import-Module -Verbose
         [CmdletBinding()]
         [OutputType([LocalPsModule])]
         param (
+            # The name of the installed module to search on the machine.
             [Parameter(Mandatory = $true, Position = 0)]
             [ValidateNotNullOrEmpty()]
             [string]$Name,
 
+            # The required module version. You don't use this parameter,
+            # then this cmdlet will search for the highest version from the specified scope.
             [Parameter(Mandatory = $false, Position = 1)]
             [ValidateNotNullOrEmpty()]
             [version]$version,
 
+            # If you don't use this parameter then, this cmdlet uses LocalMachine as a default scope.
             [Parameter(Mandatory = $false, Position = 2)]
             [ValidateSet('CurrentUser', 'LocalMachine')]
             [string]$Scope
@@ -576,7 +580,7 @@ Begin {
                         $this.Name = $Module.Name
                         $this.Info = $Module.Info
                     } else {
-                        $this._Init_($Name, 'CurrentUser', $null)
+                        $this._Init_($Name, 'LocalMachine', $null)
                     }
                 }
                 LocalPsModule([string]$Name, [string]$scope) {
@@ -590,11 +594,12 @@ Begin {
                 }
                 static hidden [PSCustomObject] Find([string]$Name) {
                     [ValidateNotNullOrEmpty()][string]$Name = $Name
-                    $ModuleBase = (Get-Module -ListAvailable -Name $Name -ErrorAction Ignore).ModuleBase[0]
+                    $ModuleBase = $null; $AvailModls = Get-Module -ListAvailable -Name $Name -ErrorAction Ignore
+                    if ($null -ne $AvailModls) { $ModuleBase = ($AvailModls.ModuleBase -as [string[]])[0] }
                     if ($null -ne $ModuleBase) {
                         return [LocalPsModule]::Find($Name, [IO.DirectoryInfo]::New($ModuleBase))
                     } else {
-                        return [LocalPsModule]::Find($Name, 'CurrentUser', $null)
+                        return [LocalPsModule]::Find($Name, 'LocalMachine', $null)
                     }
                 }
                 static hidden [PSCustomObject] Find([string]$Name, [IO.DirectoryInfo]$ModuleBase) {
@@ -604,7 +609,7 @@ Begin {
                         Path       = $null
                         Psd1       = $null
                         Info       = @{}
-                        scope      = 'CurrentUser'
+                        scope      = 'LocalMachine'
                         Exists     = $false
                         Version    = [version]::New()
                         IsReadOnly = $false
@@ -621,17 +626,14 @@ Begin {
                     return $result
                 }
                 static hidden [PSCustomObject] Find([string]$Name, [string]$scope, [version]$version) {
-                    $Module = $null; $PsModule_Paths = $([LocalPsModule]::Get_Module_Paths($(
-                                if ([string]::IsNullOrWhiteSpace($scope)) { 'CurrentUser' } else {
-                                    $scope
-                                }
-                            )
-                        ) | ForEach-Object { [IO.DirectoryInfo]::New("$_") } | Where-Object { $_.Exists }
+                    $ModuleScope = $scope; if ([string]::IsNullOrWhiteSpace($ModuleScope)) { $ModuleScope = 'LocalMachine' }
+                    $Module = $null; $PsModule_Paths = $([LocalPsModule]::Get_Module_Paths($ModuleScope) |
+                            ForEach-Object { [IO.DirectoryInfo]::New("$_") } | Where-Object { $_.Exists }
                     ).GetDirectories().Where({ $_.Name -eq $Name });
                     if ($PsModule_Paths.count -gt 0) {
                         $Get_versionDir = [scriptblock]::Create('param([IO.DirectoryInfo[]]$direcrory) return ($direcrory | ForEach-Object { $_.GetDirectories() | Where-Object { $_.Name -as [version] -is [version] } })')
                         $has_versionDir = $Get_versionDir.Invoke($PsModule_Paths).count -gt 0
-                        $ModulePsdFiles = [IO.FileInfo[]]$PsModule_Paths | ForEach-Object {
+                        $ModulePsdFiles = $PsModule_Paths | ForEach-Object {
                             if ($has_versionDir) {
                                 [string]$MaxVersion = ($Get_versionDir.Invoke([IO.DirectoryInfo]::New("$_")) | Select-Object @{l = 'version'; e = { $_.BaseName -as [version] } } | Measure-Object -Property version -Maximum).Maximum
                                 [IO.FileInfo]::New([IO.Path]::Combine("$_", $MaxVersion, $_.BaseName + '.psd1'))
@@ -648,29 +650,26 @@ Begin {
                     }
                     return $Module
                 }
-                static [string] Get_Module_Paths() {
+                static [string[]] Get_Module_Paths() {
                     return [LocalPsModule]::Get_Module_Paths($null)
                 }
-                static [string] Get_Module_Paths([string]$scope) {
+                static [string[]] Get_Module_Paths([string]$scope) {
                     [string[]]$_Module_Paths = [System.Environment]::GetEnvironmentVariable('PSModulePath').Split([IO.Path]::PathSeparator)
                     if ([string]::IsNullOrWhiteSpace($scope)) { return $_Module_Paths }
                     [ValidateSet('CurrentUser', 'LocalMachine')][string]$scope = $scope
                     if (!(Get-Variable -Name IsWindows -ErrorAction Ignore) -or $(Get-Variable IsWindows -ValueOnly)) {
                         $psv = Get-Variable PSVersionTable -ValueOnly
-                        $module_folder = if ($psv.ContainsKey('PSEdition') -and $psv.PSEdition -eq 'Core') { 'PowerShell' } else { 'WindowsPowerShell' }
-                        $allUsers_path = Join-Path -Path $env:ProgramFiles -ChildPath $module_folder
-                        $curr_UserPath = Join-Path -Path $([System.Environment]::GetFolderPath('MyDocuments')) -ChildPath $module_folder
-                        $_Module_Paths = $_Module_Paths.Where({ if ($Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" } else { $_ -notlike "*$curr_UserPath*" -or $_ -like "*$env:SystemRoot*" } })
+                        $allUsers_path = Join-Path -Path $env:ProgramFiles -ChildPath $(if ($psv.ContainsKey('PSEdition') -and $psv.PSEdition -eq 'Core') { 'PowerShell' } else { 'WindowsPowerShell' })
+                        if ($Scope -eq 'CurrentUser') { $_Module_Paths = $_Module_Paths.Where({ $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*$env:SystemRoot*" }) }
                     } else {
                         $allUsers_path = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('SHARED_MODULES')) -Parent
-                        $curr_UserPath = Split-Path -Path ([System.Management.Automation.Platform]::SelectProductNameForDirectory('USER_MODULES')) -Parent
-                        $_Module_Paths = $_Module_Paths.Where({ if ($Scope -eq 'CurrentUser') { $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" } else { $_ -notlike "*$curr_UserPath*" -or $_ -like "*/var/lib/*" } })
+                        if ($Scope -eq 'CurrentUser') { $_Module_Paths = $_Module_Paths.Where({ $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" }) }
                     }
                     return $_Module_Paths
                 }
                 hidden _Init_ ([string]$Name, [string]$scope, [version]$version) {
                     [ValidateSet('CurrentUser', 'LocalMachine')][string]$scope = $scope
-                    $Module = $this::Find($Name, $scope, $version); $this.IsReadOnly = $Module.IsReadOnly;
+                    $Module = [LocalPsModule]::Find($Name, $scope, $version); $this.IsReadOnly = $Module.IsReadOnly;
                     $this.version = $Module.version; $this.Exists = $Module.Exists; $this.Scope = $Module.Scope
                     $this.Path = $Module.Path
                     $this.Psd1 = $Module.Psd1
@@ -693,6 +692,8 @@ Begin {
         }
     }
     function Get-ModulePath {
+        # .DESCRIPTION
+        #  Gets the path of installed module; a path you can use with Import-module.
         # .EXAMPLE
         # Get-ModulePath -Name posh-git -version 0.7.3 | Import-module -verbose
         # Will retrieve posh-git version 0.7.3 from $env:psmodulepath and import it.
@@ -705,20 +706,18 @@ Begin {
             [Parameter(Mandatory = $false, Position = 1)]
             [ValidateNotNullOrEmpty()]
             [ValidateScript({
-                    if ($_ -as 'version' -is [version]) {
-                        $true
-                    } else {
+                    if (!($_ -as 'version' -is [version])) {
                         throw [System.ComponentModel.InvalidEnumArgumentException]::new('Please Provide a valid version string')
-                    }
+                    }; $true
                 }
             )]
             [string]$version,
 
             [Parameter(Mandatory = $false, Position = 2)]
             [ValidateSet('CurrentUser', 'LocalMachine')]
-            [string]$Scope = 'CurrentUser'
+            [string]$Scope = 'LocalMachine'
         )
-        if ($PSCmdlet.MyInvocation.BoundParameters.ContainsKey('version')) {
+        if ($PSBoundParameters.ContainsKey('version')) {
             return (Get-LocalModule -Name $Name -version ([version]::New($version)) -Scope $Scope).Path
         } else {
             return (Get-LocalModule -Name $Name -Scope $Scope).Path
@@ -1390,7 +1389,7 @@ Process {
         # Remove Module
         if ($Task -notcontains 'Import') {
             Uninstall-Module $ModuleName -ErrorAction Ignore
-            Remove-Item -Path (Get-InstalledModule -Name $ModuleName).InstalledLocation -Recurse -Force -ErrorAction Ignore
+            Get-ModulePath $ModuleName | Remove-Item -Recurse -Force -ErrorAction Ignore
         }
         $Local_PSRepo = [IO.DirectoryInfo]::new("$RepoPath")
         if ($Local_PSRepo.Exists) {
