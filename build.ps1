@@ -1356,17 +1356,18 @@ Process {
         Invoke-Command -ScriptBlock $PSake_Build
         Write-BuildLog "Create a 'local' repository"
         $RepoPath = [IO.Path]::Combine([environment]::GetEnvironmentVariable("HOME"), 'LocalPSRepo')
-        New-Item -Path "$RepoPath" -ItemType Directory -Force -ErrorAction Ignore | Out-Null
-        Invoke-Command -ScriptBlock ([scriptblock]::Create("Register-PSRepository LocalPSRepo -SourceLocation '$RepoPath' -PublishLocation '$RepoPath' -InstallationPolicy Trusted -Verbose:`$false; Register-PackageSource -Name LocalPsRepo -Location '$RepoPath' -Trusted -ProviderName Bootstrap")) -ErrorAction Ignore
+        if (!(Get-Variable -Name IsWindows -ErrorAction Ignore) -or $(Get-Variable IsWindows -ValueOnly)) {
+            $RepoPath = [IO.Path]::Combine([environment]::GetEnvironmentVariable("UserProfile"), 'LocalPSRepo')
+        }; if (!(Test-Path -Path $RepoPath -PathType Container -ErrorAction Ignore)) { New-Directory -Path $RepoPath | Out-Null }
+        Invoke-Command -ScriptBlock ([scriptblock]::Create("Register-PSRepository LocalPSRepo -SourceLocation '$RepoPath' -PublishLocation '$RepoPath' -InstallationPolicy Trusted -Verbose:`$false -ErrorAction Ignore; Register-PackageSource -Name LocalPsRepo -Location '$RepoPath' -Trusted -ProviderName Bootstrap -ErrorAction Ignore"))
         Write-Verbose "Verify that the new repository was created successfully"
-        $PsRepo = Get-PSRepository LocalPSRepo -Verbose:$false
-        if (!(Test-Path -Path ($PsRepo.SourceLocation) -PathType Container -ErrorAction Ignore)) {
-            New-Directory -Path $PsRepo.SourceLocation | Out-Null
+        if ($null -eq (Get-PSRepository LocalPSRepo -Verbose:$false -ErrorAction Ignore)) {
+            Throw [System.Exception]::New('Failed to create LocalPsRepo', [System.IO.DirectoryNotFoundException]::New($RepoPath))
         }
         $ModuleName = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
         $ModulePath = [IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput')), $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')), $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber')))
         # Publish To LocalRepo
-        $ModulePackage = [IO.Path]::Combine($RepoPath.FullName, "${ModuleName}.$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber')).nupkg")
+        $ModulePackage = [IO.Path]::Combine($RepoPath, "${ModuleName}.$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber')).nupkg")
         if ([IO.File]::Exists($ModulePackage)) {
             Remove-Item -Path $ModulePackage -ErrorAction 'SilentlyContinue'
         }
@@ -1394,10 +1395,9 @@ Process {
         $Local_PSRepo = [IO.DirectoryInfo]::new("$RepoPath")
         if ($Local_PSRepo.Exists) {
             Write-BuildLog "Remove 'local' repository"
-            Remove-Item "$Local_PSRepo" -Force -Recurse
             if ($null -ne (Get-PSRepository -Name 'LocalPSRepo' -ErrorAction Ignore)) {
                 Invoke-Command -ScriptBlock ([ScriptBlock]::Create("Unregister-PSRepository -Name 'LocalPSRepo' -Verbose -ErrorAction Ignore"))
-            }
+            }; Remove-Item "$Local_PSRepo" -Force -Recurse -ErrorAction Ignore
         }
     }
 }
