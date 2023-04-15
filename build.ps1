@@ -379,72 +379,6 @@ Begin {
     #endregion Variables
 
     #region    BuildHelper_Functions
-    class dotEnv {
-        [Array]static Read([string]$EnvFile) {
-            $content = Get-Content $EnvFile -ErrorAction Stop
-            $res_Obj = [System.Collections.Generic.List[string[]]]::new()
-            foreach ($line in $content) {
-                if ([string]::IsNullOrWhiteSpace($line)) {
-                    Write-Verbose "[GetdotEnv] Skipping empty line"
-                    continue
-                }
-                if ($line.StartsWith("#") -or $line.StartsWith("//")) {
-                    Write-Verbose "[GetdotEnv] Skipping comment: $line"
-                    continue
-                }
-            ($m, $d ) = switch -Wildcard ($line) {
-                    "*:=*" { "Prefix", ($line -split ":=", 2); Break }
-                    "*=:*" { "Suffix", ($line -split "=:", 2); Break }
-                    "*=*" { "Assign", ($line -split "=", 2); Break }
-                    Default {
-                        throw 'Unable to find Key value pair in line'
-                    }
-                }
-                $res_Obj.Add(($d[0].Trim(), $d[1].Trim(), $m));
-            }
-            return $res_Obj
-        }
-        static [void] Update([string]$EnvFile, [string]$Key, [string]$Value) {
-            [void]($d = [dotenv]::Read($EnvFile) | Select-Object @{l = 'key'; e = { $_[0] } }, @{l = 'value'; e = { $_[1] } }, @{l = 'method'; e = { $_[2] } })
-            $Entry = $d | Where-Object { $_.key -eq $Key }
-            if ([string]::IsNullOrEmpty($Entry)) {
-                throw [System.Exception]::new("key: $Key not found.")
-            }
-            $Entry.value = $Value; $ms = [PSObject]@{ Assign = '='; Prefix = ":="; Suffix = "=:" };
-            Remove-Item $EnvFile -Force; New-Item $EnvFile -ItemType File | Out-Null;
-            foreach ($e in $d) { "{0} {1} {2}" -f $e.key, $ms[$e.method], $e.value | Out-File $EnvFile -Append -Encoding utf8 }
-        }
-
-        static [void] Set([string]$EnvFile) {
-            #return if no env file
-            if (!(Test-Path $EnvFile)) {
-                Write-Verbose "[setdotEnv] Could not find .env file"
-                return
-            }
-
-            #read the local env file
-            $content = [dotEnv]::Read($EnvFile)
-            Write-Verbose "[setdotEnv] Parsed .env file: $EnvFile"
-            foreach ($value in $content) {
-                switch ($value[2]) {
-                    "Assign" {
-                        [Environment]::SetEnvironmentVariable($value[0], $value[1], "Process") | Out-Null
-                    }
-                    "Prefix" {
-                        $value[1] = "{0};{1}" -f $value[1], [System.Environment]::GetEnvironmentVariable($value[0])
-                        [Environment]::SetEnvironmentVariable($value[0], $value[1], "Process") | Out-Null
-                    }
-                    "Suffix" {
-                        $value[1] = "{1};{0}" -f $value[1], [System.Environment]::GetEnvironmentVariable($value[0])
-                        [Environment]::SetEnvironmentVariable($value[0], $value[1], "Process") | Out-Null
-                    }
-                    Default {
-                        throw [System.IO.InvalidDataException]::new()
-                    }
-                }
-            }
-        }
-    }
     function Set-BuildVariables {
         <#
         .SYNOPSIS
@@ -465,6 +399,74 @@ Begin {
             [ValidateNotNullOrEmpty()][Alias('Prefix', 'RUN_ID')]
             [String]$VarNamePrefix
         )
+        begin {
+            class dotEnv {
+                [Array]static Read([string]$EnvFile) {
+                    $content = Get-Content $EnvFile -ErrorAction Stop
+                    $res_Obj = [System.Collections.Generic.List[string[]]]::new()
+                    foreach ($line in $content) {
+                        if ([string]::IsNullOrWhiteSpace($line)) {
+                            Write-Verbose "[GetdotEnv] Skipping empty line"
+                            continue
+                        }
+                        if ($line.StartsWith("#") -or $line.StartsWith("//")) {
+                            Write-Verbose "[GetdotEnv] Skipping comment: $line"
+                            continue
+                        }
+                        ($m, $d ) = switch -Wildcard ($line) {
+                            "*:=*" { "Prefix", ($line -split ":=", 2); Break }
+                            "*=:*" { "Suffix", ($line -split "=:", 2); Break }
+                            "*=*" { "Assign", ($line -split "=", 2); Break }
+                            Default {
+                                throw 'Unable to find Key value pair in line'
+                            }
+                        }
+                        $res_Obj.Add(($d[0].Trim(), $d[1].Trim(), $m));
+                    }
+                    return $res_Obj
+                }
+                static [void] Update([string]$EnvFile, [string]$Key, [string]$Value) {
+                    [void]($d = [dotenv]::Read($EnvFile) | Select-Object @{l = 'key'; e = { $_[0] } }, @{l = 'value'; e = { $_[1] } }, @{l = 'method'; e = { $_[2] } })
+                    $Entry = $d | Where-Object { $_.key -eq $Key }
+                    if ([string]::IsNullOrEmpty($Entry)) {
+                        throw [System.Exception]::new("key: $Key not found.")
+                    }
+                    $Entry.value = $Value; $ms = [PSObject]@{ Assign = '='; Prefix = ":="; Suffix = "=:" };
+                    Remove-Item $EnvFile -Force; New-Item $EnvFile -ItemType File | Out-Null;
+                    foreach ($e in $d) { "{0} {1} {2}" -f $e.key, $ms[$e.method], $e.value | Out-File $EnvFile -Append -Encoding utf8 }
+                }
+
+                static [void] Set([string]$EnvFile) {
+                    #return if no env file
+                    if (!(Test-Path $EnvFile)) {
+                        Write-Verbose "[setdotEnv] Could not find .env file"
+                        return
+                    }
+
+                    #read the local env file
+                    $content = [dotEnv]::Read($EnvFile)
+                    Write-Verbose "[setdotEnv] Parsed .env file: $EnvFile"
+                    foreach ($value in $content) {
+                        switch ($value[2]) {
+                            "Assign" {
+                                [Environment]::SetEnvironmentVariable($value[0], $value[1], "Process") | Out-Null
+                            }
+                            "Prefix" {
+                                $value[1] = "{0};{1}" -f $value[1], [System.Environment]::GetEnvironmentVariable($value[0])
+                                [Environment]::SetEnvironmentVariable($value[0], $value[1], "Process") | Out-Null
+                            }
+                            "Suffix" {
+                                $value[1] = "{1};{0}" -f $value[1], [System.Environment]::GetEnvironmentVariable($value[0])
+                                [Environment]::SetEnvironmentVariable($value[0], $value[1], "Process") | Out-Null
+                            }
+                            Default {
+                                throw [System.IO.InvalidDataException]::new()
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Process {
             if (![bool][int]$env:IsAC) {
@@ -515,6 +517,49 @@ Begin {
         }
         "$elapse_msg{0}" -f (' ' * (30 - $elapse_msg.Length))
     }
+    function Write-TerminatingError {
+        <#
+        .SYNOPSIS
+            Utility to throw an errorrecord
+        .DESCRIPTION
+            Utility to create ErrorRecords on systems that don't have ThrowError BuiltIn (ie: $PowerShellversion -lt core-6.1.0-windows)
+        #>
+        [CmdletBinding()]
+        [OutputType([System.Management.Automation.ErrorRecord])]
+        param (
+            [parameter(Mandatory = $true)]
+            [ValidateNotNullOrEmpty()]
+            [System.Management.Automation.PSCmdlet]
+            $CallerPSCmdlet,
+
+            [parameter(Mandatory = $true)]
+            [ValidateNotNullOrEmpty()]
+            [System.String]
+            $ExceptionName,
+
+            [parameter(Mandatory = $true)]
+            [ValidateNotNullOrEmpty()]
+            [System.String]
+            $ExceptionMessage,
+
+            [System.Object]
+            $ExceptionObject,
+
+            [parameter(Mandatory = $true)]
+            [ValidateNotNullOrEmpty()]
+            [System.String]
+            $ErrorId,
+
+            [parameter(Mandatory = $true)]
+            [ValidateNotNull()]
+            [System.Management.Automation.ErrorCategory]
+            $ErrorCategory
+        )
+
+        $exception = New-Object $ExceptionName $ExceptionMessage;
+        $errorRecord = New-Object System.Management.Automation.ErrorRecord $exception, $ErrorId, $ErrorCategory, $ExceptionObject
+        $CallerPSCmdlet.ThrowTerminatingError($errorRecord)
+    }
     function New-Directory {
         [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'str')]
         param (
@@ -561,10 +606,10 @@ Begin {
                 [string]$Name
                 [string]$version
                 [IO.FileInfo]$Psd1
-                [string]$Scope
+                [System.String]$Scope
                 [IO.DirectoryInfo]$Path
                 [bool]$Exists = $false
-                [hashtable]$Info = @{}
+                [psobject]$Info = $null
                 [bool]$IsReadOnly = $false
                 [bool]$HasVersiondirs = $false
 
@@ -616,7 +661,7 @@ Begin {
                     }
                     $ModulePsd1 = ($ModuleBase.GetFiles().Where({ $_.Name -like "$Name*" -and $_.Extension -eq '.psd1' }))[0]
                     if ($null -eq $ModulePsd1) { return $result }
-                    $result.Info = Import-PowerShellDataFile -Path $ModulePsd1.FullName
+                    $result.Info = [LocalPsModule]::ReadPowershellDataFile($ModulePsd1.FullName)
                     $result.Name = $ModulePsd1.BaseName
                     $result.Psd1 = $ModulePsd1
                     $result.Path = if ($result.Psd1.Directory.Name -as [version] -is [version]) { $result.Psd1.Directory.Parent } else { $result.Psd1.Directory }
@@ -641,10 +686,16 @@ Begin {
                                 [IO.FileInfo]::New([IO.Path]::Combine("$_", $_.BaseName + '.psd1'))
                             }
                         } | Where-Object { $_.Exists }
+                        $Get_ModuleVersion = {
+                            param ([Parameter(Mandatory)][string]$Psd1Path)
+                            $data = [LocalPsModule]::ReadPowershellDataFile($Psd1Path)
+                            $_ver = $data.ModuleVersion; if ($null -eq $_ver) { $_ver = [version][IO.FileInfo]::New($Psd1Path).Directory.Name }
+                            return $_ver
+                        }
                         $Req_ModulePsd1 = if ($null -eq $version) {
                             $ModulePsdFiles | Sort-Object -Property version -Descending | Select-Object -First 1
                         } else {
-                            $ModulePsdFiles | Where-Object { (Import-PowerShellDataFile -Path $_.FullName).ModuleVersion -eq $version }
+                            $ModulePsdFiles | Where-Object { $Get_ModuleVersion.Invoke($_.FullName) -eq $version }
                         }
                         $Module = [LocalPsModule]::Find($Req_ModulePsd1.Name, $Req_ModulePsd1.Directory)
                     }
@@ -666,6 +717,12 @@ Begin {
                         if ($Scope -eq 'CurrentUser') { $_Module_Paths = $_Module_Paths.Where({ $_ -notlike "*$($allUsers_path | Split-Path)*" -and $_ -notlike "*/var/lib/*" }) }
                     }
                     return $_Module_Paths
+                }
+                static hidden [PSObject] ReadPowershellDataFile([string]$Psd1Path) {
+                    $null = Get-Item -Path $Psd1Path -ErrorAction Stop
+                    $data = New-Object PSObject; $text = [IO.File]::ReadAllText("$Psd1Path")
+                    $data = [scriptblock]::Create("$text").Invoke()
+                    return $data
                 }
                 hidden _Init_ ([string]$Name, [string]$scope, [version]$version) {
                     [ValidateSet('CurrentUser', 'LocalMachine')][string]$scope = $scope
@@ -707,7 +764,7 @@ Begin {
             [ValidateNotNullOrEmpty()]
             [ValidateScript({
                     if (!($_ -as 'version' -is [version])) {
-                        throw [System.ComponentModel.InvalidEnumArgumentException]::new('Please Provide a valid version string')
+                        throw [System.ArgumentException]::New('Please Provide a valid version string')
                     }; $true
                 }
             )]
@@ -806,34 +863,35 @@ Begin {
                 }
                 $Module_Path = (Get-LocalModule -Name $moduleName).Psd1 | Split-Path -ErrorAction Stop
             } catch {
-                throw $_
-                break
+                $host.UI.WriteErrorLine($_.Exception.Message)
                 # For some reason Install-Module can fail (ex: on Arch). This is a manual workaround when that happens.
                 $version_filter = if ($Version -eq 'latest') { 'IsLatestVersion' } else { "Version eq '$Version'" }
                 $url = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$moduleName' and $version_filter"
                 try {
                     $response = Invoke-RestMethod -Uri $url -Method Get -Verbose:$false
                     if ($null -eq $response) {
-                        $PSCmdlet.ThrowTerminatingError(
-                            [System.Management.Automation.ErrorRecord]::new(
-                                [System.InvalidOperationException]::new("Module not found in PSGallery repository."), 'Module_Not_Found',
-                                [System.Management.Automation.ErrorCategory]::InvalidResult,
-                                $moduleName
-                            )
-                        )
+                        $Error_params = @{
+                            ExceptionName    = 'System.InvalidOperationException'
+                            ExceptionMessage = "Module '$moduleName' was not found in PSGallery repository."
+                            ErrorId          = 'CouldNotFindModule'
+                            CallerPSCmdlet   = $PSCmdlet
+                            ErrorCategory    = 'InvalidResult'
+                        }
+                        Write-TerminatingError @Error_params
                     }
                     [ValidateNotNullOrEmpty()][string]$downloadUrl = $response.content.src
                     [ValidateNotNullOrEmpty()][string]$moduleName = $response.properties.Id
                     [ValidateNotNullOrEmpty()][string]$Version = $response.properties.Version
                     $Module_Path = $Get_Install_Path.Invoke($moduleName, $Version)
                 } catch {
-                    $PSCmdlet.ThrowTerminatingError(
-                        [System.Management.Automation.ErrorRecord]::new(
-                            [System.InvalidOperationException]::new("Failed to find PowerShell Gallery release for '$moduleName' at version '$Version'. $($_.Exception.Message)"), 'RestMethod_Failed',
-                            [System.Management.Automation.ErrorCategory]::OperationStopped,
-                            $url
-                        )
-                    )
+                    $Error_params = @{
+                        ExceptionName    = 'System.InvalidOperationException'
+                        ExceptionMessage = "Failed to find PsGallery release for '$moduleName' version '$Version'. Url used: '$url'. $($_.Exception.Message)"
+                        ErrorId          = 'RestMethod_Failed'
+                        CallerPSCmdlet   = $PSCmdlet
+                        ErrorCategory    = 'OperationStopped'
+                    }
+                    Write-TerminatingError @Error_params
                 }
                 if (!(Test-Path -Path $Module_Path -PathType Container -ErrorAction Ignore)) { New-Directory -Path $Module_Path }
                 $ModuleNupkg = [IO.Path]::Combine($Module_Path, "$moduleName.nupkg")
@@ -849,10 +907,6 @@ Begin {
                     Remove-Item -LiteralPath $Item.FullName -Recurse:$Recurse -Force -ErrorAction SilentlyContinue
                 }
             }
-        }
-
-        end {
-            Write-Host " Done." -ForegroundColor Green
         }
     }
     function Get-LatestModuleVersion {
@@ -886,25 +940,23 @@ Begin {
                     $latest_Version = $response.GetResponseHeader("Location").Split("/")[-1] -as [Version]
                     $response.Close(); $response.Dispose()
                 } catch [System.Net.WebException], [System.Net.Http.HttpRequestException], [System.Net.Sockets.SocketException] {
-                    $ex = $_.Exception
-                    $ex = New-Object -TypeName $_.Exception.GetType().FullName ("No Internet! " + $ex.Message)
-                    $PSCmdlet.ThrowTerminatingError(
-                        [System.Management.Automation.ErrorRecord]::new(
-                            $ex, 'WebException',
-                            [System.Management.Automation.ErrorCategory]::ConnectionError,
-                            $request
-                        )
-                    )
+                    $Error_params = @{
+                        ExceptionName    = $_.Exception.GetType().FullName
+                        ExceptionMessage = "No Internet! " + $_.Exception.Message
+                        ErrorId          = 'WebException'
+                        CallerPSCmdlet   = $PSCmdlet
+                        ErrorCategory    = 'ConnectionError'
+                    }
+                    Write-TerminatingError @Error_params
                 } catch {
-                    $ex = $_.Exception
-                    $ex = New-Object -TypeName $_.Exception.GetType().FullName ("PackageName '$PackageName' was Not Found. " + $ex.Message)
-                    $PSCmdlet.ThrowTerminatingError(
-                        [System.Management.Automation.ErrorRecord]::new(
-                            $ex, 'UnexpectedError',
-                            [System.Management.Automation.ErrorCategory]::OperationStopped,
-                            $request
-                        )
-                    )
+                    $Error_params = @{
+                        ExceptionName    = $_.Exception.GetType().FullName
+                        ExceptionMessage = "PackageName '$PackageName' was Not Found. " + $_.Exception.Message
+                        ErrorId          = 'UnexpectedError'
+                        CallerPSCmdlet   = $PSCmdlet
+                        ErrorCategory    = 'OperationStopped'
+                    }
+                    Write-TerminatingError @Error_params
                 }
             }
         }
@@ -928,7 +980,14 @@ Begin {
                 $Local_ModuleVersion = Get-LatestModuleVersion -Name $moduleName -Source LocalMachine
                 $Latest_ModuleVerion = Get-LatestModuleVersion -Name $moduleName -Source PsGallery
                 if (!$Latest_ModuleVerion -or $Latest_ModuleVerion -eq ([version]::New())) {
-                    throw [System.Data.OperationAbortedException]::New("Resolve-Module: Get-LatestModuleVersion: Failed to find latest module version for '$moduleName'.")
+                    $Error_params = @{
+                        ExceptionName    = 'System.Data.OperationAbortedException'
+                        ExceptionMessage = "Resolve-Module: Get-LatestModuleVersion: Failed to find latest module version for '$moduleName'."
+                        ErrorId          = 'CouldNotFindModule'
+                        CallerPSCmdlet   = $PSCmdlet
+                        ErrorCategory    = 'OperationStoped'
+                    }
+                    Write-TerminatingError @Error_params
                 }
                 if (!$Local_ModuleVersion -or $Local_ModuleVersion -eq ([version]::New())) {
                     Write-Verbose -Message "Installing $moduleName ..."
@@ -1319,7 +1378,7 @@ Process {
         if ($Task -eq 'Deploy') {
             $MSG = "Task is 'Deploy' and conditions for deployment are:`n" +
             "    + Current build system is VSTS     : $($Env:BUILD_BUILDURI -like 'vstfs:*') [$Env:BUILD_BUILDURI]`n" +
-            "    + Current branch is main         : $($Env:BUILD_SOURCEBRANCHNAME -eq 'main') [$Env:BUILD_SOURCEBRANCHNAME]`n" +
+            "    + Current branch is main           : $($Env:BUILD_SOURCEBRANCHNAME -eq 'main') [$Env:BUILD_SOURCEBRANCHNAME]`n" +
             "    + Source is not a pull request     : $($Env:BUILD_SOURCEBRANCH -notlike '*pull*') [$Env:BUILD_SOURCEBRANCH]`n" +
             "    + Commit message matches '!deploy' : $($Env:BUILD_SOURCEVERSIONMESSAGE -match '!deploy') [$Env:BUILD_SOURCEVERSIONMESSAGE]`n" +
             "    + Current PS major version is 5    : $($PSVersionTable.PSVersion.Major -eq 5) [$($PSVersionTable.PSVersion.ToString())]`n" +
@@ -1383,7 +1442,7 @@ Process {
         Install-Module $ModuleName -Repository LocalPSRepo
         # Import Module
         if ($Task -contains 'Import' -and $psake.build_success) {
-            Write-Heading "Importing $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')) to local scope"
+            Write-Heading "Import $ModuleName to local scope"
             Invoke-CommandWithLog { Import-Module $ModuleName }
         }
         Write-Heading "CleanUp: Uninstall the test module, and delete the LocalPSRepo"
