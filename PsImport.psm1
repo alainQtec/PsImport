@@ -50,7 +50,7 @@ Class PsImport {
                 throw [System.InvalidOperationException]::New("Could not import from '$path'. Please use a valid url.")
             }
             if ($uri.Scheme -notin ("file", "https")) {
-                throw [System.IO.InvalidDataException]::New("'$($uri.AbsoluteUri)' is not a valid filePath or HTTPS URL.")
+                throw [System.IO.InvalidDataException]::New("'$($uri.AbsoluteUri)' is not a valid filePath or HTTPS URL. ie uri.scheme = $($uri.Scheme)")
             }
             if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                 $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
