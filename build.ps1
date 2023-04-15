@@ -150,6 +150,7 @@ Begin {
                     "    Renaming manifest to correct casing"
                     Rename-Item (Join-Path $outputModVerDir "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1") -NewName "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1" -Force
                 }
+                $Host.UI.WriteLine()
                 "    Created compiled module at [$outputModDir]"
                 "    Output version directory contents"
                 Get-ChildItem $outputModVerDir | Format-Table -AutoSize
@@ -1381,8 +1382,7 @@ Process {
     }
     $null = Import-PackageProvider -Name NuGet -Force
     foreach ($Name in @('PackageManagement', 'PowerShellGet')) {
-        Write-BuildLog "Update module $Name ..."
-        Resolve-Module -Name $Name -UpdateModule -Verbose:$script:DefaultParameterValues['*-Module:Verbose'] -ErrorAction Stop
+        $Host.UI.WriteLine(); Resolve-Module -Name $Name -UpdateModule -Verbose:$script:DefaultParameterValues['*-Module:Verbose'] -ErrorAction Stop
     }
     Write-Heading "Finalizing build Prerequisites and Resolving dependencies ..."
     if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem')) -eq 'VSTS') {
@@ -1420,7 +1420,7 @@ Process {
             $Project_Path = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput')
             Write-Heading "Importing $Project_Name to local scope"
             $Module_Path = [IO.Path]::Combine($Project_Path, $Project_Name);
-            Invoke-CommandWithLog { Import-Module $Module_Path -Verbose:$false }
+            Invoke-CommandWithLog { Import-Module $Module_Path -Verbose }
         }
     } else {
         Invoke-Command -ScriptBlock $PSake_Build
