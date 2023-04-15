@@ -118,7 +118,7 @@ process {
         Set-Content -Value $code -Path $FilePath -Encoding utf8
         Write-Host "    Created $FileName" -ForegroundColor Gray
     }
-    Write-Host "[+] Writing tests ..." -ForegroundColor Green
+    Write-Host "[+] Writing test scripts ..." -ForegroundColor Green
     $ntTestsPath = $testFiles.Where({ $_.BaseName -eq 'PsImport.Intergration.Tests' }).FullName
     $ftTestsPath = $testFiles.Where({ $_.BaseName -eq 'PsImport.Features.Tests' }).FullName
     $mtTestsPath = $testFiles.Where({ $_.BaseName -eq 'PsImport.Module.Tests' }).FullName
