@@ -988,7 +988,7 @@ Begin {
         )
         process {
             foreach ($moduleName in $Names) {
-                Write-Host "`nResolving Module [$moduleName]" -ForegroundColor Magenta
+                Write-Host "`nResolve dependency Module [$moduleName]" -ForegroundColor Magenta
                 $Local_ModuleVersion = Get-LatestModuleVersion -Name $moduleName -Source LocalMachine
                 $Latest_ModuleVerion = Get-LatestModuleVersion -Name $moduleName -Source PsGallery
                 if (!$Latest_ModuleVerion -or $Latest_ModuleVerion -eq ([version]::New())) {
@@ -1354,7 +1354,7 @@ Process {
     $security_protocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::SystemDefault
     if ([Net.SecurityProtocolType].GetMember("Tls12").Count -gt 0) { $security_protocol = $security_protocol -bor [Net.SecurityProtocolType]::Tls12 }
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]$security_protocol
-    $host.ui.WriteLine()
+    $Host.ui.WriteLine()
     Invoke-CommandWithLog { $script:DefaultParameterValues = @{
             '*-Module:Verbose'           = $false
             'Import-Module:ErrorAction'  = 'Stop'
@@ -1366,6 +1366,7 @@ Process {
         }
     }
     Write-Heading "Prepare package feeds"
+    $Host.ui.WriteLine()
     if ($null -eq (Get-PSRepository -Name PSGallery -ErrorAction Ignore)) {
         Unregister-PSRepository -Name PSGallery -Verbose:$false -ErrorAction Ignore
         Register-PSRepository -Default -InstallationPolicy Trusted
