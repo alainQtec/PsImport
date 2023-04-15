@@ -6,10 +6,12 @@
 .LINK
     https://github.com/alainQtec/PsImport/blob/main/build.ps1
 .EXAMPLE
-    .\build.ps1 -Task Test
-    Will build the module and run ./Test-Module.ps1
+    Running ./build.ps1 will only "Init, Compile & Import" the module; That's it, no tests.
+    To run tests Use:
+    ./build.ps1 -Task Test
+    This Will build the module, Import it and run tests using the ./Test-Module.ps1 script.
 .EXAMPLE
-    .\build.ps1 -Task deploy
+    ./build.ps1 -Task deploy
     Will build the module, test it and deploy it to PsGallery
 #>
 [cmdletbinding(DefaultParameterSetName = 'task')]
@@ -85,7 +87,7 @@ Begin {
                     "$((Write-Heading "Executing task: {0}" -PassThru) -join "`n")" -f $String
                 }
             )
-            #Task Default -Depends Init,Test,Build,Deploy
+            #Task Default -Depends Init,Test and Compile. Deploy Has to be done Manually
             Task default -depends Test
 
             Task Init {
@@ -96,6 +98,7 @@ Begin {
             } -description 'Initialize build environment'
 
             Task clean -depends Init {
+                $Host.UI.WriteLine()
                 Remove-Module $ProjectName -Force -ErrorAction SilentlyContinue
                 if (Test-Path -Path $outputDir -PathType Container -ErrorAction SilentlyContinue) {
                     Write-Verbose "Cleaning Previous build Output ..."
@@ -153,28 +156,30 @@ Begin {
             } -description 'Compiles module from source'
 
             Task Import -depends Compile {
+                $Host.UI.WriteLine()
                 '    Testing import of the Compiled module.'
                 Test-ModuleManifest -Path $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
                 Import-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
             } -description 'Imports the newly compiled module'
 
-            Task Test -depends Init {
-                '    Importing Pester'
+            Task Test -depends Import {
+                Write-Heading "Executing Script: ./Test-Module.ps1"
+                $test_Script = [IO.FileInfo]::New([IO.Path]::Combine($ProjectRoot, 'Test-Module.ps1'))
+                if (!$test_Script.Exists) { throw [System.IO.FileNotFoundException]::New($test_Script.FullName) }
                 Import-Module Pester -Verbose:$false -Force -ErrorAction Stop
-                Push-Location $ProjectRoot
                 $origModulePath = $Env:PSModulePath
+                Push-Location $ProjectRoot
                 if ($Env:PSModulePath.split($pathSeperator) -notcontains $outputDir ) {
                     $Env:PSModulePath = ($outputDir + $pathSeperator + $origModulePath)
                 }
                 Remove-Module $ProjectName -ErrorAction SilentlyContinue -Verbose:$false
                 Import-Module $outputModDir -Force -Verbose:$false
-                $test_Script = [IO.FileInfo]::New([IO.Path]::Combine($ProjectRoot, 'Test-Module.ps1'))
-                if (!$test_Script.Exists) { throw [System.IO.FileNotFoundException]::New($test_Script.FullName) }
+                $Host.UI.WriteLine();
                 $TestResults = & $test_Script
-                '    Pester invocation complete!'
+                Write-Host '    Pester invocation complete!' -ForegroundColor Green
+                $TestResults | Format-List
                 if ($TestResults.FailedCount -gt 0) {
-                    $TestResults | Format-List
-                    Write-Error -Message 'One or more Pester tests failed. Build cannot continue!'
+                    Write-Error -Message "One or more Pester tests failed!"
                 }
                 Pop-Location
                 $Env:PSModulePath = $origModulePath
@@ -328,6 +333,7 @@ Begin {
                 "Pester"
                 "PSScriptAnalyzer"
             ) | Resolve-Module -UpdateModule -Verbose
+            $Host.UI.WriteLine()
             Write-BuildLog "Module Requirements Successfully resolved."
             $null = Set-Content -Path $Psake_BuildFile -Value $PSake_ScriptBlock
 
@@ -343,7 +349,9 @@ Begin {
                 Set-Variable -Name ExcludeTag -Scope global -Value $null
             }
             Invoke-psake @psakeParams @verbose
+            $Host.UI.WriteLine()
             Remove-Item $Psake_BuildFile -Verbose | Out-Null
+            $Host.UI.WriteLine()
         }
     )
     $script:Clean_EnvBuildvariables = [scriptblock]::Create({
@@ -354,7 +362,7 @@ Begin {
                 [string]$build_Id
             )
             if (![string]::IsNullOrWhiteSpace($build_Id)) {
-                Write-Heading "CleanUp"
+                Write-Heading "CleanUp: Remove Environment Variables"
                 $OldEnvNames = [Environment]::GetEnvironmentVariables().Keys | Where-Object { $_ -like "$build_Id*" }
                 if ($OldEnvNames.Count -gt 0) {
                     foreach ($Name in $OldEnvNames) {
@@ -368,6 +376,7 @@ Begin {
             } else {
                 Write-Warning "Invalid RUN_ID! Skipping ...`n"
             }
+            $Host.UI.WriteLine()
         }
     )
     #endregion ScriptBlockss
@@ -830,10 +839,12 @@ Begin {
             )
             [int]$ret = 0; $response = $null; $downloadUrl = ''; $Module_Path = ''
             $InstallModule = [scriptblock]::Create({
+                    # There are issues with pester 5.4.1 syntax, so I'll keep using -SkipPublisherCheck.
+                    # https://stackoverflow.com/questions/51508982/pester-sample-script-gets-be-is-not-a-valid-should-operator-on-windows-10-wo
                     if ($Version -eq 'latest') {
-                        Install-Module -Name $moduleName
+                        Install-Module -Name $moduleName -SkipPublisherCheck:$($moduleName -eq 'Pester')
                     } else {
-                        Install-Module -Name $moduleName -RequiredVersion $Version
+                        Install-Module -Name $moduleName -RequiredVersion $Version -SkipPublisherCheck:$($moduleName -eq 'Pester')
                     }
                 }
             )
@@ -976,7 +987,7 @@ Begin {
         )
         process {
             foreach ($moduleName in $Names) {
-                Write-Host "Resolving Module [$moduleName]" -ForegroundColor Magenta
+                Write-Host "`nResolving Module [$moduleName]" -ForegroundColor Magenta
                 $Local_ModuleVersion = Get-LatestModuleVersion -Name $moduleName -Source LocalMachine
                 $Latest_ModuleVerion = Get-LatestModuleVersion -Name $moduleName -Source PsGallery
                 if (!$Latest_ModuleVerion -or $Latest_ModuleVerion -eq ([version]::New())) {
@@ -990,10 +1001,10 @@ Begin {
                     Write-TerminatingError @Error_params
                 }
                 if (!$Local_ModuleVersion -or $Local_ModuleVersion -eq ([version]::New())) {
-                    Write-Verbose -Message "Installing $moduleName ..."
+                    Write-Verbose -Message "Install $moduleName ..."
                     Install-PsGalleryModule -Name $moduleName
                 } elseif ($Local_ModuleVersion -lt $Latest_ModuleVerion -and $UpdateModule.IsPresent) {
-                    Write-Verbose -Message "Updating $moduleName from version $Local_ModuleVersion to version [$Latest_ModuleVerion] ..."
+                    Write-Verbose -Message "Update $moduleName from version $Local_ModuleVersion to version [$Latest_ModuleVerion] ..." -Verbose
                     Install-PsGalleryModule -Name $moduleName -Version $Latest_ModuleVerion -UpdateOnly
                 } else {
                     Write-Verbose -Message "Module $moduleName is already Installed and Up-to-date."
@@ -1413,7 +1424,7 @@ Process {
         }
     } else {
         Invoke-Command -ScriptBlock $PSake_Build
-        Write-BuildLog "Create a 'local' repository"
+        Write-Heading "Create a Local repository"
         $RepoPath = [IO.Path]::Combine([environment]::GetEnvironmentVariable("HOME"), 'LocalPSRepo')
         if (!(Get-Variable -Name IsWindows -ErrorAction Ignore) -or $(Get-Variable IsWindows -ValueOnly)) {
             $RepoPath = [IO.Path]::Combine([environment]::GetEnvironmentVariable("UserProfile"), 'LocalPSRepo')
@@ -1449,7 +1460,7 @@ Process {
         # Remove Module
         if ($Task -notcontains 'Import') {
             Uninstall-Module $ModuleName -ErrorAction Ignore
-            Get-ModulePath $ModuleName | Remove-Item -Recurse -Force -ErrorAction Ignore
+            # Get-ModulePath $ModuleName | Remove-Item -Recurse -Force -ErrorAction Ignore
         }
         $Local_PSRepo = [IO.DirectoryInfo]::new("$RepoPath")
         if ($Local_PSRepo.Exists) {

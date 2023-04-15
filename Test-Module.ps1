@@ -179,10 +179,12 @@ process {
         [string]::Join("', '", (Get-Random -InputObject $scriptNames -Count 2))
     )
     [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt 12) { $_.Substring(13) } }), [System.Text.Encoding]::UTF8)
+    Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $ftTestsPath))" -ForegroundColor White
     [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$PSScriptRoot", 'Public')).GetFiles().ForEach({
             $n = [IO.Path]::GetFileNameWithoutExtension($_.FullName)
             $s = [System.Text.StringBuilder]::New(); [void]$s.AppendLine("Describe `"$n`" {`n    It `"should have command`" {`n        Get-Command $n | Should -Not -BeNullOrEmpty`n    }`n}")
             Add-Content -Path $ntTestsPath -Value $s.ToString() -Encoding utf8
+            Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $ntTestsPath))" -ForegroundColor White
         }
     )
     if ($BuildOutDir.Exists) {
@@ -191,11 +193,10 @@ process {
                 $BuildOutpt = [IO.DirectoryInfo]::New("<BuildOutpt_FullName>")
                 $Publc_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutpt.FullName, 'Public'));
                 $Privt_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutpt.FullName, 'Private'));
-                $($BuildOutpt, $Publc_Dir, $Privt_Dir).ForEach({ if (!$_.Exists) { Throw [System.IO.DirectoryNotFoundException]::New("Directory $($_.FullName) does not exist.") } })
                 # Verbose output for non-main builds on appveyor
                 # Handy for troubleshooting.
                 # Splat @Verbose against commands as needed (here or in pester tests)
-                $Verbose = @{}
+                $Verbose = @{}; Test-Path -Path "$BuildOutpt" -PathType Container -ErrorAction Stop
                 if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "development" -or $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match "!verbose") {
                     $Verbose.add("Verbose", $True)
                 }
@@ -216,7 +217,7 @@ process {
                     }
                     Context "Confirm there are no duplicate function names in private and public folders" {
                         It 'Should have no duplicate functions' {
-                            $funcNames = @()
+                            $funcNames = @(); Test-Path -Path ([string[]]($Publc_Dir, $Privt_Dir)) -PathType Container -ErrorAction Stop
                             $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) + $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { $funcNames += $_.BaseName }
                             ($funcNames | Group-Object | Where-Object { $_.Count -gt 1 }).Count | Should -BeLessThan 1
                         }
@@ -226,11 +227,12 @@ process {
         ).ToString().Replace( "<BuildOutpt_FullName>", $BuildOutDir.FullName).Replace("<Modversion>", $version)
         if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 2) {
             [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Split("`r").ForEach({ if ($_.Length -gt 16) { $_.Substring(17) } }), [System.Text.Encoding]::UTF8)
+            Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $mtTestsPath))" -ForegroundColor White
         }
     } else {
         Remove-Item $mtTestsPath -Force
     }
-    Write-Host "[+] Running tests ..." -ForegroundColor Green
+    Write-Host "[+] Testing Module ..." -ForegroundColor Green
     if (!$skipBuildOutputTest.IsPresent) {
         Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
     }
