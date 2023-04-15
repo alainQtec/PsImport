@@ -126,8 +126,8 @@ process {
     $ftTestScrpt = [scriptblock]::Create({
             #1. Test feature: Support for wildcards
             Describe "Importing functions with wildcards" {
-                Context "When importing functions with a wildcard in the filename" {
-                    It "should import all functions matching the pattern from file" {
+                Context " When importing functions with a wildcard in the filename" {
+                    It " should import all functions matching the pattern from file" {
                         $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
                         (Import * -from "./relative/path/to/script_File.psm1").ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
@@ -136,8 +136,8 @@ process {
             }
             #2. Test feature: Importing from many files at once
             Describe "Importing functions from multiple files" {
-                Context "When importing functions from multiple files" {
-                    It "should import all functions from all files" {
+                Context " When importing functions from multiple files" {
+                    It " should import all functions from all files" {
                         $expectedFunctions = @(Get-Content "./relative/path/to/fileNamedlikeabc*.ps1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
                         (Import * -from "./relative/path/to/fileNamedlikeabc*.ps1").ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
@@ -146,8 +146,8 @@ process {
             }
             #3. Test feature: Importing a function(s) from same repo
             Describe "Importing specific functions from the same repo" {
-                Context "When importing specific functions from the same repo" {
-                    It "should import only the specified functions from the specified file" {
+                Context " When importing specific functions from the same repo" {
+                    It " should import only the specified functions from the specified file" {
                         $expectedFunctions = @('funcName1', 'funcName2')
                         (Import 'funcName1', 'funcName2' -from "./repo").ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
@@ -156,8 +156,8 @@ process {
             }
             #4. Test feature: Importing a function(s) from a remote script
             Describe "Importing specific functions from a remote script" {
-                Context "When importing specific functions from a remote script" {
-                    It "should import only the specified function from the remote script" {
+                Context " When importing specific functions from a remote script" {
+                    It " should import only the specified function from the remote script" {
                         $expectedFunctions = @('Test-GitHubScript')
                         (Import Test-GitHubScript -from 'https://github.com/alainQtec/PowershellScripts/raw/main/Test-GitHubScript.ps1').ForEach({ . $_ })
                         Assert-LoadedFunctions $expectedFunctions | Should -Be $true
@@ -206,7 +206,7 @@ process {
                     Import-Module $BuildOutpt.Parent.FullName
                 }
                 Describe "Module tests: $($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')))" -Tag 'Module' {
-                    Context "Confirm files are valid Powershell syntax" {
+                    Context " Confirm files are valid Powershell syntax" {
                         $_scripts = $BuildOutpt.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
                         $testCase = $_scripts | ForEach-Object { @{ file = $_ } }
                         It "Script <file> Should have valid Powershell sysntax" -TestCases $testCase {
@@ -215,8 +215,8 @@ process {
                             $errors.Count | Should -Be 0
                         }
                     }
-                    Context "Confirm there are no duplicate function names in private and public folders" {
-                        It 'Should have no duplicate functions' {
+                    Context " Confirm there are no duplicate function names in private and public folders" {
+                        It ' Should have no duplicate functions' {
                             $funcNames = @(); Test-Path -Path ([string[]]($Publc_Dir, $Privt_Dir)) -PathType Container -ErrorAction Stop
                             $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) + $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { $funcNames += $_.BaseName }
                             ($funcNames | Group-Object | Where-Object { $_.Count -gt 1 }).Count | Should -BeLessThan 1
