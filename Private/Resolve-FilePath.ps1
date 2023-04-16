@@ -51,12 +51,15 @@
     begin {
         $pathsToSearch = @(); $resolved = @(); $error_Msg = $null
         $pathsToSearch += if ($PSCmdlet.ParameterSetName.Equals('Query')) { @($Query) } else { $Paths }
-        $GitHubrepoRoot = $(if (Get-Command -Name git -CommandType Application -ErrorAction Ignore) { git rev-parse --show-toplevel }else { $null }) -as [IO.DirectoryInfo]
+        $GitHubRoot = $(if (Get-Command -Name git -CommandType Application -ErrorAction Ignore) { git rev-parse --show-toplevel }else { $null }) -as [IO.DirectoryInfo]
         # TODO: Add functionality for the $Exclude param. By default will be filled with all paths in the gitIgnore ie:
         # [IO.File]::ReadAllLines([IO.Path]::Combine($ExecutionContext.SessionState.Path.CurrentLocation, '.gitignore')).Where({!$_.StartsWith('#') -and ![string]::IsNullOrWhiteSpace($_)})
     }
     process {
         forEach ($p in $pathsToSearch) {
+            if ([Regex]::IsMatch($p, '^https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
+                $error_Msg += " '$p' is a Url! Please provide a valid File Path."; continue
+            }
             # TopLevel directory search:
             $q = $p; $p = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($p);
             [string[]]$resolvedPaths = (Resolve-Path $p -ErrorAction Ignore).Path
@@ -71,7 +74,7 @@
                 Continue
             }
             # Multi-Level directory search / -Recurse :
-            $resolvedPaths = $null; if ((Test-Path -Path $GitHubrepoRoot.FullName -PathType Container -ErrorAction Ignore)) {
+            $resolvedPaths = $null; if ((Test-Path -Path $GitHubRoot.FullName -PathType Container -ErrorAction Ignore)) {
                 $resolvedPaths = $(switch ($true) {
                         ([IO.Path]::IsPathFullyQualified($q)) {
                             Get-Item -Path $q -ErrorAction Ignore
@@ -83,16 +86,16 @@
                             } else {
                                 [scriptblock]::Create("([IO.Path]::GetRelativePath(`$ExecutionContext.SessionState.Path.CurrentLocation, `$_.FullName)) -eq `"$q`" -or `$_.FullName -eq `"$q`"")
                             }
-                            $(Get-ChildItem -Path $GitHubrepoRoot.FullName -File -Recurse -ErrorAction Ignore).Where($IsMatch)
+                            $(Get-ChildItem -Path $GitHubRoot.FullName -File -Recurse -ErrorAction Ignore).Where($IsMatch)
                             break
                         }
                         (![IO.Path]::IsPathFullyQualified($q) -and !$q.Contains([IO.Path]::DirectorySeparatorChar)) {
                             $IsMatch = if ($q.Contains('*')) { [scriptblock]::Create('$_.Name -like $q -or $_.BaseName -like $q') } else { [scriptblock]::Create('$_.Name -eq $q -or $_.BaseName -eq $q') }
-                            $(Get-ChildItem -Path $GitHubrepoRoot.FullName -File -Recurse -ErrorAction Ignore).Where($IsMatch)
+                            $(Get-ChildItem -Path $GitHubRoot.FullName -File -Recurse -ErrorAction Ignore).Where($IsMatch)
                             break
                         }
                         Default {
-                            Get-ChildItem -Path $GitHubrepoRoot.FullName -File -Recurse -Filter $q -ErrorAction Ignore
+                            Get-ChildItem -Path $GitHubRoot.FullName -File -Recurse -Filter $q -ErrorAction Ignore
                         }
                     }
                 ) | Select-Object -ExpandProperty FullName

@@ -35,67 +35,67 @@ Class PsImport {
         return $res
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string]$Path, [bool]$throwOnFailure) {
-        [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string]$Path = $Path
-        $FilePaths = Resolve-FilePath $Path -Extensions '.ps1', '.psm1'; [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths
-        return [PsImport]::GetFunction($FnName, $FilePaths, $throwOnFailure)
+        [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string[]]$Path = $Path -as [string[]]
+        return [PsImport]::GetFunction($FnName, $Path, $throwOnFailure)
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths, [bool]$throwOnFailure) {
-        [ValidateNotNullOrEmpty()][string[]]$FilePaths = Resolve-FilePath $FilePaths -Extensions '.ps1', '.psm1';
-        $_FilePaths = @(); foreach ($path in $FilePaths) {
+        $_Functions = @(); $_FilePaths = @(); $PathsToSearch = @(); $FilePaths | ForEach-Object {
+            if ([string]::IsNullOrWhiteSpace($_)) { continue }
+            if ([Regex]::IsMatch($_, '^https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) { $PathsToSearch += $_; continue }
+            $PathsToSearch += Resolve-FilePath $_ -Extensions '.ps1', '.psm1'
+        }
+        foreach ($path in $PathsToSearch) {
+            Write-Debug "Parsing File: '$Path' ..." -Debug
             if (![string]::IsNullOrWhiteSpace("$Path")) {
                 $uri = $path -as 'Uri'; if ($uri -isnot [Uri]) {
                     throw [System.InvalidOperationException]::New("Could not import from '$path'. Please use a valid url.")
                 }
                 if ($uri.Scheme -notin ("file", "https")) {
-                    throw [System.IO.InvalidDataException]::New("'$($uri.AbsoluteUri)' is not a valid filePath or HTTPS URL. ie uri.scheme = $($uri.Scheme)")
+                    throw [System.IO.InvalidDataException]::New("'$path' is not a valid filePath or HTTPS URL.")
                 }
                 if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                     $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
                     [void][PsImport]::DownloadFile($uri, $outFile.FullName);
                     $_FilePaths += $outFile.FullName;
                 } else {
-                    $_FilePaths += Resolve-FilePath -Path $path -throwOnFailure:$throwOnFailure -NoAmbiguous
+                    $_FilePaths += $path
                 }
             }
         }
-        [ValidateNotNullOrEmpty()][string[]]$_FilePaths = $_FilePaths
-        if ($FnName -ne "*") {
-            return [PsImport]::ParseFile($_FilePaths).Where({ $_.Name -eq $FnName })
+        Write-Debug "$($_FilePaths -join ', ')" -Debug
+        if ($_FilePaths.count -eq 0) {
+            if ($throwOnFailure) { throw [System.IO.FileNotFoundException]::New("$FilePaths") }
+        } elseif ($FnName -ne "*") {
+            foreach ($file in $_FilePaths) {
+                $_Functions += [PsImport]::ParseFile($file).Where({ $_.Name -eq $FnName })
+            }
         } else {
-            return [PsImport]::ParseFile($_FilePaths)
+            foreach ($file in $_FilePaths) {
+                $_Functions += [PsImport]::ParseFile($file)
+            }
         }
+        return $_Functions
     }
     static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths) {
-        Write-Debug 'static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths) {' -Debug
         return [PsImport]::GetFunctions($FnNames, $FilePaths, $true);
     }
     static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {
-        Write-Debug 'static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {' -Debug
-        Write-Debug "FnNames: $($FnNames -join ', ')" -Debug
-        Write-Debug "c* : $(!$FnNames.Contains('*'))" -Debug
-        $_Functions = @(); $searchedAllNames = $false;
+        $_Functions = @(); $searchedAllNames = $false; $FilePaths = Resolve-FilePath $FilePaths
         if (!$FnNames.Contains('*')) {
             foreach ($n in $FnNames) {
                 if ($n.Contains('*')) {
-                    $s = $n.StartsWith([char]'*') -or $n.EndsWith([char]'*')
-                    Write-Debug "`$n.Contains(*) N : $n . IspS: $s" -Debug
                     if ($searchedAllNames) {
-                        Write-Debug 'Ok $hasdoneAllPaths = $true, USE IT' -Debug
                         $_Functions += ([PsImport]::Functions.Keys.Where({ $_ -like $n }) | ForEach-Object { [PsImport]::Functions[$_] })
                         continue
                     }
-                    Write-Debug 'sets $hasdoneAllPaths = $true ' -Debug
                     $_Functions += [PsImport]::GetFunction('*', $FilePaths, $throwOnFailure).Where({ $_.Name -like $n })
                     $searchedAllNames = $true
                     Continue
                 }
-                Write-Debug "NORMAL N: $n" -Debug
                 $_Functions += [PsImport]::GetFunction($n, $FilePaths, $throwOnFailure)
-                Write-Debug 'Iteration complete' -Debug
             }
         } else {
             $_Functions += [PsImport]::GetFunction('*', $FilePaths, $throwOnFailure)
-            Write-Debug '$fnNames.Contains(*) . Done.' -Debug
         }
         return $_Functions
     }
@@ -138,7 +138,7 @@ Class PsImport {
                 }
             )
         }
-        $FnDetails = @(); $Paths = (Resolve-FilePath -FilePaths $Path -throwOnFailure:$false).Where({
+        $FnDetails = @(); $Paths = (Resolve-FilePath -Paths $Path -throwOnFailure:$false).Where({
                 $item = Get-Item -Path $_; $item -is [system.io.FileInfo] -and $item.Extension -in @('.ps1', '.psm1')
             }
         )
