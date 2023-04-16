@@ -52,7 +52,7 @@
     )
 
     begin {
-        $Functions = @(); $FnNames = [string[]](if ($PSCmdlet.ParameterSetName -eq 'Name') { $Name } else { $Names })
+        $Functions = @(); $FnNames = $(if ($PSCmdlet.ParameterSetName -eq 'Name') { $Name } else { $Names }) -as [string[]]
         if ($path.Count -eq 1) { [string]$path = $path[0] }
     }
     process {
