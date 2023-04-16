@@ -84,7 +84,7 @@ begin {
             Write-Output $result
         }
     )
-    function Assert-LoadedFunctions {
+    function script:Assert-LoadedFunctions {
         param ([Parameter(Mandatory)][string[]]$Names)
         $f = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
         $s = $true; $Names.ForEach({ $s = $s -and $f.Contains($_) })
@@ -124,6 +124,13 @@ process {
     $mtTestsPath = $testFiles.Where({ $_.BaseName -eq 'PsImport.Module.Tests' }).FullName
     $scriptNames = $testFiles.Where({ $_.Extension -eq '.ps1' -and $_.BaseName.Contains('-') }).BaseName
     $ftTestScrpt = [scriptblock]::Create({
+            $Modversion = '<Modversion>'
+            $BuildOutpt = Get-Item -Path '<BuildOutpt_FullName>'
+            if (![string]::IsNullOrWhiteSpace($Modversion)) {
+                Import-Module $BuildOutpt.Parent.FullName -Version $Modversion
+            } else {
+                Import-Module $BuildOutpt.FullName
+            }
             #1. Test feature: Support for wildcards
             Describe "Importing functions with wildcards" {
                 Context " When importing functions with a wildcard in the filename" {
@@ -165,19 +172,13 @@ process {
                 }
             }
         }
-    ).ToString().Replace(
-        './relative/path/to/',
-        $resRlPath + [IO.Path]::DirectorySeparatorChar
-    ).Replace(
-        'script_File', (Get-Random -InputObject $testFiles.Where({ $_.Extension -eq '.psm1' }).BaseName)
-    ).Replace(
-        'fileNamedlikeabc', ($scriptNames.substring(0, 9) | Group-Object -NoElement | Sort-Object Count)[-1].Name
-    ).Replace(
-        "./repo", $resRlPath
-    ).Replace(
-        "funcName1', 'funcName2",
-        [string]::Join("', '", (Get-Random -InputObject $scriptNames -Count 2))
-    )
+    ).ToString() `
+        -replace "./relative/path/to/", ($resRlPath + [IO.Path]::DirectorySeparatorChar) `
+        -replace "script_File", (Get-Random -InputObject $testFiles.Where({ $_.Extension -eq '.psm1' }).BaseName) `
+        -replace "fileNamedlikeabc", ($scriptNames.substring(0, 9) | Group-Object -NoElement | Sort-Object Count)[-1].Name `
+        -replace "./repo", $resRlPath -replace "<Modversion>", $version `
+        -replace "funcName1', 'funcName2", [string]::Join("', '", (Get-Random -InputObject $scriptNames -Count 2)) `
+        -replace "<BuildOutpt_FullName>", $BuildOutDir.FullName
     [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt 12) { $_.Substring(13) } }), [System.Text.Encoding]::UTF8)
     Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $ftTestsPath))" -ForegroundColor White
     [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$PSScriptRoot", 'Public')).GetFiles().ForEach({
@@ -189,25 +190,11 @@ process {
     )
     if ($BuildOutDir.Exists) {
         $ModuleTestScript = [scriptblock]::Create({
-                $Modversion = "<Modversion>";
-                $BuildOutpt = [IO.DirectoryInfo]::New("<BuildOutpt_FullName>")
-                $Publc_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutpt.FullName, 'Public'));
-                $Privt_Dir = [IO.DirectoryInfo]::New([IO.Path]::Combine($BuildOutpt.FullName, 'Private'));
-                # Verbose output for non-main builds on appveyor
-                # Handy for troubleshooting.
-                # Splat @Verbose against commands as needed (here or in pester tests)
-                $Verbose = @{}; Test-Path -Path "$BuildOutpt" -PathType Container -ErrorAction Stop
-                if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "development" -or $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match "!verbose") {
-                    $Verbose.add("Verbose", $True)
-                }
-                if ([string]::IsNullOrWhiteSpace($Modversion)) {
-                    Import-Module $BuildOutpt.FullName -Version $Modversion
-                } else {
-                    Import-Module $BuildOutpt.Parent.FullName
-                }
                 Describe "Module tests: $($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')))" -Tag 'Module' {
                     Context " Confirm files are valid Powershell syntax" {
-                        $_scripts = $BuildOutpt.GetFiles("*", [System.IO.SearchOption]::AllDirectories).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
+                        $_scripts = $(Get-Item -Path "<BuildOutpt_FullName>").GetFiles(
+                            "*", [System.IO.SearchOption]::AllDirectories
+                        ).Where({ $_.Extension -in ('.ps1', '.psd1', '.psm1') })
                         $testCase = $_scripts | ForEach-Object { @{ file = $_ } }
                         It "Script <file> Should have valid Powershell sysntax" -TestCases $testCase {
                             param($file) $contents = Get-Content -Path $file.fullname -ErrorAction Stop
@@ -217,6 +204,8 @@ process {
                     }
                     Context " Confirm there are no duplicate function names in private and public folders" {
                         It ' Should have no duplicate functions' {
+                            $Publc_Dir = Get-Item -Path ([IO.Path]::Combine("<BuildOutpt_FullName>", 'Public'))
+                            $Privt_Dir = Get-Item -Path ([IO.Path]::Combine("<BuildOutpt_FullName>", 'Private'))
                             $funcNames = @(); Test-Path -Path ([string[]]($Publc_Dir, $Privt_Dir)) -PathType Container -ErrorAction Stop
                             $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) + $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { $funcNames += $_.BaseName }
                             ($funcNames | Group-Object | Where-Object { $_.Count -gt 1 }).Count | Should -BeLessThan 1
@@ -224,7 +213,7 @@ process {
                     }
                 }
             }
-        ).ToString().Replace( "<BuildOutpt_FullName>", $BuildOutDir.FullName).Replace("<Modversion>", $version)
+        ).ToString() -replace "<BuildOutpt_FullName>", $BuildOutDir.FullName
         if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 2) {
             [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Split("`r").ForEach({ if ($_.Length -gt 16) { $_.Substring(17) } }), [System.Text.Encoding]::UTF8)
             Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $mtTestsPath))" -ForegroundColor White
