@@ -24,8 +24,8 @@
         # Import all functions in files that look kike ileNamedlikeabc
     #>
     [CmdletBinding(DefaultParameterSetName = 'Names')]
-    [OutputType([scriptblock[]])]
-    [Alias("Import", "require")]
+    [OutputType([System.Object[]])]
+    [Alias("Import", "require", "Get-Functions")]
     param (
         # Names of functions to import
         [Parameter(Position = 0, Mandatory = $true, ParameterSetName = 'Names')]
@@ -52,15 +52,14 @@
     )
 
     begin {
-        [string[]]$fnNames = if ($PSCmdlet.ParameterSetName -eq 'Name') { $Name } else { $Names }
-        $functions = @(); if ($path.Count -eq 1) { [string]$path = $path[0] }
+        $Functions = @(); $FnNames = [string[]](if ($PSCmdlet.ParameterSetName -eq 'Name') { $Name } else { $Names })
+        if ($path.Count -eq 1) { [string]$path = $path[0] }
     }
     process {
-        foreach ($n in $fnNames) {
-            $functions += [PsImport]::GetFunction($n, $path).scriptblock
-        }
+        $throwOnFailure = $false
+        $Functions += [PsImport]::GetFunctions($FnNames, $path, $throwOnFailure).scriptBlock
     }
     end {
-        return $functions
+        return $Functions
     }
 }

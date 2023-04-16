@@ -36,14 +36,11 @@ Class PsImport {
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string]$Path, [bool]$throwOnFailure) {
         [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string]$Path = $Path
-        $Path_Info = [IO.DirectoryInfo]::new([IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location), "$Path")))
-        $FilePaths = @($Path); if ($Path_Info.Attributes -eq 'Directory') { $FilePaths = $Path_Info.GetFiles("*", [System.IO.SearchOption]::TopDirectoryOnly).Where({ $_.Extension -in ('.ps1', '.psm1') }).FullName }
-        [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths
+        $FilePaths = Resolve-FilePath $Path -Extensions '.ps1', '.psm1'; [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths
         return [PsImport]::GetFunction($FnName, $FilePaths, $throwOnFailure)
     }
     static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths, [bool]$throwOnFailure) {
-        # $j = ",`n"; Write-Debug "Paths: $($FilePaths -join $j)" -Debug
-        # Validate paths and select only those which can be resolved
+        [ValidateNotNullOrEmpty()][string[]]$FilePaths = Resolve-FilePath $FilePaths -Extensions '.ps1', '.psm1';
         $_FilePaths = @(); foreach ($path in $FilePaths) {
             if (![string]::IsNullOrWhiteSpace("$Path")) {
                 $uri = $path -as 'Uri'; if ($uri -isnot [Uri]) {
@@ -67,6 +64,40 @@ Class PsImport {
         } else {
             return [PsImport]::ParseFile($_FilePaths)
         }
+    }
+    static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths) {
+        Write-Debug 'static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths) {' -Debug
+        return [PsImport]::GetFunctions($FnNames, $FilePaths, $true);
+    }
+    static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {
+        Write-Debug 'static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {' -Debug
+        Write-Debug "FnNames: $($FnNames -join ', ')" -Debug
+        Write-Debug "c* : $(!$FnNames.Contains('*'))" -Debug
+        $_Functions = @(); $searchedAllNames = $false;
+        if (!$FnNames.Contains('*')) {
+            foreach ($n in $FnNames) {
+                if ($n.Contains('*')) {
+                    $s = $n.StartsWith([char]'*') -or $n.EndsWith([char]'*')
+                    Write-Debug "`$n.Contains(*) N : $n . IspS: $s" -Debug
+                    if ($searchedAllNames) {
+                        Write-Debug 'Ok $hasdoneAllPaths = $true, USE IT' -Debug
+                        $_Functions += ([PsImport]::Functions.Keys.Where({ $_ -like $n }) | ForEach-Object { [PsImport]::Functions[$_] })
+                        continue
+                    }
+                    Write-Debug 'sets $hasdoneAllPaths = $true ' -Debug
+                    $_Functions += [PsImport]::GetFunction('*', $FilePaths, $throwOnFailure).Where({ $_.Name -like $n })
+                    $searchedAllNames = $true
+                    Continue
+                }
+                Write-Debug "NORMAL N: $n" -Debug
+                $_Functions += [PsImport]::GetFunction($n, $FilePaths, $throwOnFailure)
+                Write-Debug 'Iteration complete' -Debug
+            }
+        } else {
+            $_Functions += [PsImport]::GetFunction('*', $FilePaths, $throwOnFailure)
+            Write-Debug '$fnNames.Contains(*) . Done.' -Debug
+        }
+        return $_Functions
     }
     [System.Management.Automation.Language.FunctionDefinitionAST[]] static GetFncDefinition([string]$Path) {
         return [PsImport]::GetFncDefinition([System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$Null))
