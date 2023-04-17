@@ -3,24 +3,25 @@ using namespace System.Management.Automation.Language
 Class PsImport {
     static [System.Collections.Generic.List[string]] $ExcludedNames
     static [System.Collections.Generic.Dictionary[string, FunctionDetails]] $Functions # Dictionary of Functions that have already been parsed, so we won't have to do it over again (for performance reasons).
-    static [FunctionDetails[]] GetFunction([string]$FnName) { return [PsImport]::GetFunction($FnName, $false) }
-    static [FunctionDetails[]] GetFunction([string]$FnName, [string]$FilePath) { return [PsImport]::GetFunction($FnName, $FilePath, $false) }
-    static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths) { return [PsImport]::GetFunction($FnName, $FilePaths, $false) }
-    static [FunctionDetails[]] GetFunction([string]$FnName, [bool]$throwOnFailure) {
-        [ValidateNotNullOrEmpty()][string]$FnName = $FnName; $res = @();
-        [string[]]$FnNames = switch ($true) {
-            $FnName.Equals('*') { foreach ($Name in [PsImport]::GetFnNames()) { $res += [PsImport]::GetFunction($Name) } ; break }
-            $FnName.Contains('*') {
-                $AllNames = [PsImport]::GetFnNames(); $Fn_Names = @($AllNames | Where-Object { $_ -like $FnName });
-                if (($Fn_Names | Where-Object { $_ -notin $AllNames }).Count -gt 0 -and $throwOnFailure) {
-                    throw [System.Management.Automation.ItemNotFoundException]::New($($Fn_Names -join ', '))
-                }; $Fn_Names; break
+    static [FunctionDetails[]] GetFunction([Query[]]$FnNames) { return [PsImport]::GetFunction($FnNames, $false) }
+    static [FunctionDetails[]] GetFunction([Query[]]$FnNames, [bool]$throwOnFailure) {
+        [ValidateNotNullOrEmpty()][Query[]]$FnNames = $FnNames;
+        $res = @(); $_FnNames = @()
+        foreach ($Fn in $FnNames) {
+            $_FnNames += switch ($true) {
+                $Fn.Text.Equals('*') { foreach ($Name in [PsImport]::GetFnNames()) { $res += [PsImport]::GetFunction($Name) } ; break }
+                $Fn.Text.Contains('*') {
+                    $AllNames = [PsImport]::GetFnNames(); $Fn_Names = @($AllNames | Where-Object { $_ -like $Fn.Text });
+                    if (($Fn_Names | Where-Object { $_ -notin $AllNames }).Count -gt 0 -and $throwOnFailure) {
+                        throw [System.Management.Automation.ItemNotFoundException]::New($($Fn_Names -join ', '))
+                    }; $Fn_Names; break
+                }
+                ([PsImport]::IsValidSource($FnNames, $false)) { $(Get-Command -CommandType Function | Where-Object { $_.Source -eq "$($Fn.Text)" } | Select-Object -ExpandProperty Name); break }
+                Default { $Fn.Text }
             }
-            ([PsImport]::IsValidSource($FnName, $false)) { $(Get-Command -CommandType Function | Where-Object { $_.Source -eq "$FnName" } | Select-Object -ExpandProperty Name); break }
-            Default { $FnName }
         }
         if ($res.Count -ne 0) { return $res }
-        foreach ($Name in $FnNames) {
+        foreach ($Name in $_FnNames) {
             if ([bool]$(try { [PsImport]::Functions.Keys.Contains($Name) } catch { $false })) { $res += [PsImport]::Functions["$Name"]; continue }
             $c = Get-Command $Name -CommandType Function -ErrorAction Ignore
             if ($null -eq $c) { continue }
@@ -28,18 +29,17 @@ Class PsImport {
             $res += [FunctionDetails]::New($c.Module.Path, $Name, [scriptblock]::Create("$fn"))
         }
         if ($res.Count -eq 0) {
-            $_Message = "Could not find function(s). Named: '$FnName'"
+            $_Message = "Could not find function(s). Named: $($FnNames -join ', ')"
             if ($throwOnFailure) { throw [System.Management.Automation.ItemNotFoundException]::New($_Message) }
             $(Get-Variable -Name host).Value.UI.WriteWarningLine("$_Message")
         }
         return $res
     }
-    static [FunctionDetails[]] GetFunction([string]$FnName, [string]$Path, [bool]$throwOnFailure) {
-        [ValidateNotNullOrEmpty()][string]$FnName = $FnName; [ValidateNotNullOrEmpty()][string[]]$Path = $Path -as [string[]]
-        return [PsImport]::GetFunction($FnName, $Path, $throwOnFailure)
-    }
-    static [FunctionDetails[]] GetFunction([string]$FnName, [string[]]$FilePaths, [bool]$throwOnFailure) {
-        $_Functions = @(); $_FilePaths = @(); $PathsToSearch = @(); $FilePaths | ForEach-Object {
+    static [FunctionDetails[]] GetFunction([Query[]]$FnNames, [string[]]$FilePaths) { return [PsImport]::GetFunction($FnNames, $FilePaths, $false) }
+    static [FunctionDetails[]] GetFunction([Query[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {
+        [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths
+        $_Functions_ = @(); $_Functions = @(); $_FilePaths = @(); $PathsToSearch = @();
+        $FilePaths | ForEach-Object {
             if ([string]::IsNullOrWhiteSpace($_)) { continue }
             if ([Regex]::IsMatch($_, '^https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) { $PathsToSearch += $_; continue }
             $PathsToSearch += Resolve-FilePath $_ -Extensions '.ps1', '.psm1'
@@ -62,40 +62,41 @@ Class PsImport {
                 }
             }
         }
-        Write-Debug "$($_FilePaths -join ', ')" -Debug
         if ($_FilePaths.count -eq 0) {
             if ($throwOnFailure) { throw [System.IO.FileNotFoundException]::New("$FilePaths") }
-        } elseif ($FnName -ne "*") {
-            foreach ($file in $_FilePaths) {
-                $_Functions += [PsImport]::ParseFile($file).Where({ $_.Name -eq $FnName })
-            }
-        } else {
-            foreach ($file in $_FilePaths) {
-                $_Functions += [PsImport]::ParseFile($file)
+            return $_Functions #still null
+        }
+        foreach ($file in $_FilePaths) {
+            $_Functions += [PsImport]::ParseFile($file)
+        }
+        foreach ($n in $FnNames) {
+            if ($n.Text.Contains('*')) {
+                $_Functions_ += $_Functions.Where({ $_.Name -like $n.Text })
+            } else {
+                $_Functions_ += $_Functions.Where({ $_.Name -eq $n.Text })
             }
         }
-        return $_Functions
+        $_Functions_ = $_Functions_ | Sort-Object -Unique
+        return $_Functions_
     }
-    static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths) {
-        return [PsImport]::GetFunctions($FnNames, $FilePaths, $true);
-    }
-    static [FunctionDetails[]] GetFunctions([string[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {
+    static [FunctionDetails[]] GetFunctions([Query[]]$FnNames, [string[]]$FilePaths) { return [PsImport]::GetFunctions($FnNames, $FilePaths, $true) }
+    static [FunctionDetails[]] GetFunctions([Query[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {
         $_Functions = @(); $searchedAllNames = $false; $FilePaths = Resolve-FilePath $FilePaths
-        if (!$FnNames.Contains('*')) {
+        if (!$FnNames.Text.Contains('*')) {
             foreach ($n in $FnNames) {
-                if ($n.Contains('*')) {
+                if ($n.Text.Contains('*')) {
                     if ($searchedAllNames) {
-                        $_Functions += ([PsImport]::Functions.Keys.Where({ $_ -like $n }) | ForEach-Object { [PsImport]::Functions[$_] })
+                        $_Functions += ([PsImport]::Functions.Keys.Where({ $_ -like $n.Text }) | ForEach-Object { [PsImport]::Functions[$_] })
                         continue
                     }
-                    $_Functions += [PsImport]::GetFunction('*', $FilePaths, $throwOnFailure).Where({ $_.Name -like $n })
+                    $_Functions += [PsImport]::GetFunction([Query]'*', $FilePaths, $throwOnFailure).Where({ $_.Name -like $n.Text })
                     $searchedAllNames = $true
                     Continue
                 }
                 $_Functions += [PsImport]::GetFunction($n, $FilePaths, $throwOnFailure)
             }
         } else {
-            $_Functions += [PsImport]::GetFunction('*', $FilePaths, $throwOnFailure)
+            $_Functions += [PsImport]::GetFunction([Query]'*', $FilePaths, $throwOnFailure)
         }
         return $_Functions
     }
@@ -116,7 +117,8 @@ Class PsImport {
     }
     static hidden [string[]] GetFnNames() {
         # Get all Names of loaded funtions whose source is known (loaded from modules)
-        return @((Get-Command -CommandType Function | Where-Object { $_.Source -in [PsImport]::GetCommandSources() }).Name)
+        $sources = [PsImport]::GetCommandSources()
+        return $(Get-Command -CommandType Function | Where-Object { $_.Source -in $sources }).Name -as [string[]]
     }
     static [FunctionDetails[]] ParseFile([string[]]$Path) {
         return [PsImport]::ParseFile($Path, $false, $false)
@@ -218,6 +220,13 @@ Class PsImport {
     static [String] ToTitleCase ([string]$String) { return (Get-Culture).TextInfo.ToTitleCase($String.ToLower()) }
     static [hashtable] ReadPSDataFile([string]$FilePath) {
         return [scriptblock]::Create("$(Get-Content $FilePath | Out-String)").Invoke()
+    }
+}
+class Query: Microsoft.PowerShell.Cmdletization.QueryBuilder {
+    [ValidateNotNullOrEmpty()][string]$text
+    Query() {}
+    Query([string]$text) {
+        $this.Text = $text
     }
 }
 class FunctionDetails {
