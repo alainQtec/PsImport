@@ -40,21 +40,26 @@ Class PsImport {
     }
     static [FunctionDetails[]] GetFunctions([Query[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {
         [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths; [ValidateNotNullOrEmpty()][Query[]]$FnNames = $FnNames
-        $result = @(); $_Functions = @(); $_FilePaths = @(); [string[]]$PathsToSearch = @();
+        $result = @(); $_Functions = @(); $_FilePaths = @(); [string[]]$PathsToSearch = @(); $ValidScheme = ("file", "https");
         foreach ($line in $FilePaths) {
             if ([string]::IsNullOrWhiteSpace("$line")) { continue }
             if ([Regex]::IsMatch("$line", '^https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                 $PathsToSearch += "$line"; continue
             }
             $PathsToSearch += Resolve-FilePath "$line" -Extensions '.ps1', '.psm1'
-        }
+        }; $IsNotWindows = !(Get-Variable -Name IsWindows -ErrorAction Ignore) -and !$(Get-Variable IsWindows -ValueOnly)
         foreach ($path in $PathsToSearch) {
             if (![string]::IsNullOrWhiteSpace("$Path")) {
                 $uri = $path -as 'Uri'; if ($uri -isnot [Uri]) {
                     throw [System.InvalidOperationException]::New("Could not import from '$path'. Please use a valid url.")
                 }
-                if ($uri.Scheme -notin ("file", "https")) {
-                    throw [System.IO.InvalidDataException]::New("'$path' is not a valid filePath or HTTPS URL.")
+                if ($uri.Scheme -notin $ValidScheme) {
+                    if ($IsNotWindows) {
+                        $uri = $path.Replace([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) -as 'Uri'
+                    }
+                    if ($uri.Scheme -notin $ValidScheme) {
+                        throw [System.IO.InvalidDataException]::New("'$path' is not a valid filePath or HTTPS URL.")
+                    }
                 }
                 if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                     $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
