@@ -40,32 +40,25 @@ Class PsImport {
     }
     static [FunctionDetails[]] GetFunctions([Query[]]$FnNames, [string[]]$FilePaths, [bool]$throwOnFailure) {
         [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths; [ValidateNotNullOrEmpty()][Query[]]$FnNames = $FnNames
-        $result = @(); $_Functions = @(); $_FilePaths = @(); [string[]]$PathsToSearch = @(); $ValidScheme = ("file", "https");
+        $result = @(); $_Functions = @(); $_FilePaths = @(); [string[]]$PathsToSearch = @();
         foreach ($line in $FilePaths) {
             if ([string]::IsNullOrWhiteSpace("$line")) { continue }
             if ([Regex]::IsMatch("$line", '^https?:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                 $PathsToSearch += "$line"; continue
             }
             $PathsToSearch += Resolve-FilePath "$line" -Extensions '.ps1', '.psm1'
-        }; $IsNotWindows = !(Get-Variable -Name IsWindows -ErrorAction Ignore) -and !$(Get-Variable IsWindows -ValueOnly)
+        }
         foreach ($path in $PathsToSearch) {
             if (![string]::IsNullOrWhiteSpace("$Path")) {
-                $uri = $path -as 'Uri'; if ($uri -isnot [Uri]) {
-                    throw [System.InvalidOperationException]::New("Could not import from '$path'. Please use a valid url.")
+                $path = [PsImport]::ParseLink($path)
+                if (!$path.Scheme.IsValid) {
+                    throw [System.IO.InvalidDataException]::New("'$($path.FullName)' is not a valid filePath or HTTPS URL.")
                 }
-                if ($uri.Scheme -notin $ValidScheme) {
-                    if ($IsNotWindows) {
-                        $uri = $path.Replace([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) -as 'Uri'
-                    }
-                    if ($uri.Scheme -notin $ValidScheme) {
-                        throw [System.IO.InvalidDataException]::New("'$path' is not a valid filePath or HTTPS URL.")
-                    }
-                }
-                if ([Regex]::IsMatch($uri.AbsoluteUri, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
+                if ([Regex]::IsMatch($path.FullName, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
                     $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
-                    [void][PsImport]::DownloadFile($uri, $outFile.FullName);
+                    [void][PsImport]::DownloadFile($path.FullName, $outFile.FullName);
                     $_FilePaths += $outFile.FullName; Continue
-                }; $_FilePaths += $path
+                }; $_FilePaths += $path.FullName
             }
         }
         if ($_FilePaths.count -eq 0) {
@@ -145,6 +138,28 @@ Class PsImport {
         }
         $FnDetails | ForEach-Object { [void][PsImport]::Record($_) }
         return $FnDetails
+    }
+    static [psobject] ParseLink([string]$text) {
+        [ValidateNotNullOrEmpty()][string]$text = $text
+        $uri = $text -as 'Uri'; if ($uri -isnot [Uri]) {
+            throw [System.InvalidOperationException]::New("Could not create uri from text '$text'.")
+        }; $Scheme = $uri.Scheme
+        if ([regex]::IsMatch($text, '^(\/[a-zA-Z0-9_-]+)+|([a-zA-Z]:\\(((?![<>:"\/\\|?*]).)+\\?)*((?![<>:"\/\\|?*]).)+)$')) {
+            if ($text.ToCharArray().Where({ $_ -in [IO.Path]::InvalidPathChars }).Count -eq 0) {
+                $Scheme = 'file'
+            } else {
+                Write-Debug "'$text' has invalidPathChars in it !" -Debug
+            }
+        }
+        $isValid = $Scheme -in @('file', 'https')
+        $OutptObject = [pscustomobject]@{
+            FullName = $text
+            Scheme   = [PSCustomObject]@{
+                Name    = $Scheme
+                IsValid = $isValid
+            }
+        }
+        return $OutptObject
     }
     static [void] DownloadFile([string]$uri, [string]$outFile) {
         [PsImport]::DownloadFile($uri, $outFile, $false)
