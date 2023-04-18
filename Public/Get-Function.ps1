@@ -8,8 +8,10 @@
         + can import many functions at once
         + Support wildcards. See examples.
         + No need to know relative paths of files in the repo. just use unique filename
-    .NOTES
-        Inspiration: https://gist.github.com/alainQtec/71123a1d28f37eaa49fd032ba0248650
+    .INPUTS
+        [string[]]
+    .OUTPUTS
+        [scriptBlock[]]
     .LINK
         https://github.com/alainQtec/PsImport/blob/main/Public/Get-Function.ps1
     .EXAMPLE
@@ -23,24 +25,18 @@
         (Import * -from '/relative/path/to/fileNamedlikeabc*.ps1').ForEach({ . $_ })
         # Import all functions in files that look kike ileNamedlikeabc
     #>
-    [CmdletBinding(DefaultParameterSetName = 'Names')]
+    [CmdletBinding()]
     [OutputType([System.Object[]])]
     [Alias("Import", "require", "Get-Functions")]
     param (
-        # Names of functions to import
-        [Parameter(Position = 0, Mandatory = $true, ParameterSetName = 'Names')]
-        [ValidateNotNullOrEmpty()]
-        [Alias('functions')]
-        [string[]]$Names,
-
-        # Names of functions to import
+        # Query or Names of functions to import
         [Parameter(Position = 0, Mandatory = $true, ParameterSetName = 'Name')]
         [ValidateNotNullOrEmpty()]
-        [Alias('n', 'function')]
-        [string]$Name,
+        [Alias('n', 'names', 'function', 'functions')]
+        [string[]]$Name,
 
         # FilePath from which to import
-        [Parameter(Position = 1, Mandatory = $true, ParameterSetName = '__AllParameterSets')]
+        [Parameter(Position = 1, Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [Alias('f', "from")]
         [string[]]$path,
@@ -52,12 +48,23 @@
     )
 
     begin {
-        $Functions = @(); $FnNames = $(if ($PSCmdlet.ParameterSetName -eq 'Name') { $Name } else { $Names }) -as [Query[]]
-        if ($path.Count -eq 1) { [string]$path = $path[0] }
+        $Functions = @()
     }
     process {
-        $throwOnFailure = $false
-        $Functions += [PsImport]::GetFunctions($FnNames, $path, $throwOnFailure).scriptBlock
+        try {
+            [PsImport]::GetFunctions(($Name -as [Query[]]), $path, ([string]$ErrorActionPreference -eq 'Stop')).Foreach({
+                    $Functions += $_.scriptBlock
+                }
+            )
+        } catch {
+            $PSCmdlet.ThrowTerminatingError(
+                [System.Management.Automation.ErrorRecord]::New(
+                    $_.Exception, $_.FullyQualifiedErrorId, $_.CategoryInfo.Category, [PSCustomObject]@{
+                        Params = $PSCmdlet.MyInvocation.BoundParameters
+                    }
+                )
+            )
+        }
     }
     end {
         return $Functions
