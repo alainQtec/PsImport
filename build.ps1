@@ -875,7 +875,8 @@ Begin {
                 }
                 $Module_Path = (Get-LocalModule -Name $moduleName).Psd1 | Split-Path -ErrorAction Stop
             } catch {
-                $host.UI.WriteErrorLine($_.Exception.Message)
+                $VerboseMsg = 'Normal Installation Failed :' + $_.Exception.Message + "`nUsing Manual Instalation ..."
+                Write-Verbose $VerboseMsg -Verbose
                 # For some reason Install-Module can fail (ex: on Arch). This is a manual workaround when that happens.
                 $version_filter = if ($Version -eq 'latest') { 'IsLatestVersion' } else { "Version eq '$Version'" }
                 $url = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$moduleName' and $version_filter"
