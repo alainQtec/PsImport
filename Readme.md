@@ -70,4 +70,4 @@ If you would like to contribute to psimport, please feel free to submit a pull r
 
 ## **License**
 
-This module is licensed under the MIT [License](LICENSE).
+This module is licensed under the MIT [License](https://alainQtec.MIT-license.org).
