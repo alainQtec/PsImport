@@ -12,4 +12,4 @@ jobs:
       - name: Publish
         env:
           NUGETAPIKEY: ${{ secrets.NUGETAPIKEY }}
-        run: function getvar ($name) { return [Environment]::GetEnvironmentVariable($env:RUN_ID + $name) }; $BuildScript = [IO.Path]::Combine((Get-Location).Path, 'build.ps1'); & $BuildScript -Task Test; Publish-Module -Path ([IO.path]::Combine((getvar 'BuildOutput') , (getvar 'ProjectName') , (getvar 'BuildNumber'))) -NuGetApiKey $Env:NUGETAPIKEY -Repository PSGallery -Verbose
+        run: $BuildScript = [IO.Path]::Combine((Get-Location).Path, 'build.ps1'); & $BuildScript; Publish-Module -Path ([IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber'))) -NuGetApiKey $Env:NUGETAPIKEY -Repository PSGallery -Verbose
