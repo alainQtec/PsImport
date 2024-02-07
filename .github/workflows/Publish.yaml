@@ -12,4 +12,4 @@ jobs:
       - name: Publish
         env:
           NUGETAPIKEY: ${{ secrets.NUGETAPIKEY }}
-        run: ./publish.ps1
+        run: $BuildScript = [IO.Path]::Combine($PSScriptRoot, 'build.ps1'); & $BuildScript -Task Deploy -ApiKey $NugetApiKey
