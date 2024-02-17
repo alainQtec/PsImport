@@ -187,7 +187,7 @@ Begin {
             } -description 'Run Pester tests against compiled module'
 
             Task Deploy -depends Test -description 'Release new github version and Publish module to PSGallery' {
-                if (($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match '!deploy' -and $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "main") -or $script:ForceDeploy -eq $true) {
+                if ([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem') -eq 'VSTS' -or ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
                     # Load the module, read the exported functions, update the psd1 FunctionsToExport
                     $commParsed = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage') | Select-String -Pattern '\sv\d+\.\d+\.\d+\s'
                     if ($commParsed) {
