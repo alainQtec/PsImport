@@ -12,4 +12,4 @@ jobs:
       - name: Publish
         env:
           NUGETAPIKEY: ${{ secrets.NUGETAPIKEY }}
-        run: & $([IO.Path]::Combine((Get-Location).Path, 'build.ps1')) -Task Deploy
+        run: ./build.ps1 -Task Deploy
