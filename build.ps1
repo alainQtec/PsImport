@@ -193,12 +193,10 @@ Begin {
                     if ($commParsed) {
                         $commitVer = $commParsed.Matches.Value.Trim().Replace('v', '')
                     }
-                    $CurrentVersion = (Get-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).Version
-                    $galVer = '0.0.1'; if ($moduleInGallery = Find-Module "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))*" -Repository PSGallery -ErrorAction Ignore) {
-                        $galVer = $moduleInGallery.Version.ToString()
-                        "    Current version on the PSGallery is: $galVer"
-                    }
-                    $galVerSplit = $galVer.Split('.')
+                    $current_build_version = $CurrentVersion = (Get-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).Version
+                    $Latest_Module_Verion = Get-LatestModuleVersion -Name ([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')) -Source PsGallery
+                    "    Current version on the PSGallery is: $Latest_Module_Verion"
+                    $galVerSplit = "$Latest_Module_Verion".Split('.')
                     $nextGalVer = [System.Version](($galVerSplit[0..($galVerSplit.Count - 2)] -join '.') + '.' + ([int]$galVerSplit[-1] + 1))
 
                     $versionToDeploy = switch ($true) {
@@ -253,8 +251,7 @@ Begin {
                             ver  = [version]::new($latest_Github_release.tag_name.substring(1))
                             url  = $latest_Github_release.html_url
                         }
-                        $Latest_Module_Verion = Get-LatestModuleVersion -Name PsImport -Source PsGallery
-                        $Is_Lower_PsGallery_Version = [version]$versionToDeploy -le $Latest_Module_Verion
+                        $Is_Lower_PsGallery_Version = [version]$current_build_version -le $Latest_Module_Verion
                         $should_Publish_ToPsGallery = ![string]::IsNullOrWhiteSpace($env:NUGETAPIKEY) -and !$Is_Lower_PsGallery_Version
                         $Is_Lower_GitHub_Version = [version]$versionToDeploy -le $latest_Github_release.ver
                         $should_Publish_GitHubRelease = ![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID) -and !$Is_Lower_GitHub_Version
