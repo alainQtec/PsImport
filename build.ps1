@@ -255,51 +255,45 @@ Begin {
                                     "    Updating module version on manifest to [$($versionToDeploy)]"
                                     Update-Metadata -Path $manifestPath -PropertyName ModuleVersion -Value $versionToDeploy -Verbose
                                 }
-                                try {
-                                    Write-Host "    Publishing version [$($versionToDeploy)] to PSGallery..." -ForegroundColor Green
-                                    Publish-Module -Path $outputModVerDir -NuGetApiKey $Env:NugetApiKey -Repository PSGallery -Verbose
-                                    # Publish-Module -Path ([IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber'))) -NuGetApiKey $Env:NUGETAPIKEY -Repository PSGallery -Verbose
-                                    Write-Host "    Deployment successful!" -ForegroundColor Green
-                                } catch {
-                                    $err = $_
-                                    Write-BuildError $err.Exception.Message
-                                    throw $err
-                                }
+                                Write-Host "    Publishing version [$($versionToDeploy)] to PSGallery..." -ForegroundColor Green
+                                Publish-Module -Path $outputModVerDir -NuGetApiKey $env:NUGETAPIKEY -Repository PSGallery -Verbose
+                                Write-Host "    Published to PsGallery successful!" -ForegroundColor Green
                             } else {
-                                "    [SKIPPED] Deployment of version [$($versionToDeploy)] to PSGallery"
+                                Write-Warning "    [SKIPPED] Deployment of version [$($versionToDeploy)] to PSGallery"
                             }
-                            $commitId = git rev-parse --verify HEAD
-                            if (![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
-                                [ValidateNotNullOrWhiteSpace()][string]$versionToDeploy = $versionToDeploy.ToString()
-                                $ReleaseNotes = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
-                                [ValidateNotNullOrWhiteSpace()][string]$ReleaseNotes = $ReleaseNotes
-                                "    Creating Release ZIP..."
-                                $ZipTmpPath = [System.IO.Path]::Combine($PSScriptRoot, "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).zip")
-                                if ([IO.File]::Exists($ZipTmpPath)) { Remove-Item $ZipTmpPath -Force }
-                                Add-Type -Assembly System.IO.Compression.FileSystem
-                                [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $ZipTmpPath)
-                                "    Publishing Release v$versionToDeploy @ commit Id [$($commitId)] to GitHub..."
-                                $ReleaseNotes += (git log -1 --pretty=%B | Select-Object -Skip 2) -join "`n"
-                                $ReleaseNotes = $ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy)
-                                Set-EnvironmentVariable -name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $ReleaseNotes
-                                $gitHubParams = @{
-                                    VersionNumber    = $versionToDeploy
-                                    CommitId         = $commitId
-                                    ReleaseNotes     = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
-                                    ArtifactPath     = $ZipTmpPath
-                                    GitHubUsername   = 'alainQtec'
-                                    GitHubRepository = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
-                                    GitHubApiKey     = $env:GitHubPAT
-                                    Draft            = $false
-                                }
-                                Publish-GithubRelease @gitHubParams
-                                "    Release creation successful!"
-                            } else {
-                                "    [SKIPPED] Publishing Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
-                            }
+                            # Todo: Check current Github Release version before blindly publishing github release
+                            # $commitId = git rev-parse --verify HEAD
+                            # if (![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
+                            #     [ValidateNotNullOrWhiteSpace()][string]$versionToDeploy = $versionToDeploy.ToString()
+                            #     $ReleaseNotes = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
+                            #     [ValidateNotNullOrWhiteSpace()][string]$ReleaseNotes = $ReleaseNotes
+                            #     "    Creating Release ZIP..."
+                            #     $ZipTmpPath = [System.IO.Path]::Combine($PSScriptRoot, "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).zip")
+                            #     if ([IO.File]::Exists($ZipTmpPath)) { Remove-Item $ZipTmpPath -Force }
+                            #     Add-Type -Assembly System.IO.Compression.FileSystem
+                            #     [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $ZipTmpPath)
+                            #     Write-Heading "    Publishing Release v$versionToDeploy @ commit Id [$($commitId)] to GitHub..."
+                            #     $ReleaseNotes += (git log -1 --pretty=%B | Select-Object -Skip 2) -join "`n"
+                            #     $ReleaseNotes = $ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy)
+                            #     Set-EnvironmentVariable -name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $ReleaseNotes
+                            #     $gitHubParams = @{
+                            #         VersionNumber    = $versionToDeploy
+                            #         CommitId         = $commitId
+                            #         ReleaseNotes     = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
+                            #         ArtifactPath     = $ZipTmpPath
+                            #         GitHubUsername   = 'alainQtec'
+                            #         GitHubRepository = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
+                            #         GitHubApiKey     = $env:GitHubPAT
+                            #         Draft            = $false
+                            #     }
+                            #     Publish-GithubRelease @gitHubParams
+                            #     Write-Heading "    Github release created successful!"
+                            # } else {
+                            #     Write-BuildError "    SKIPPED Publishing GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
+                            # }
                         } catch {
                             $_ | Format-List * -Force
-                            throw $_
+                            Write-BuildError $_
                         }
                     } else {
                         Write-Host -ForegroundColor Yellow "No module version matched! Negating deployment to prevent errors"
