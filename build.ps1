@@ -270,21 +270,23 @@ Begin {
                             }
                             $commitId = git rev-parse --verify HEAD
                             if (![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
-                                "    Creating Release ZIP..."
-                                $zipPath = [System.IO.Path]::Combine($PSScriptRoot, "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).zip")
-                                if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-                                Add-Type -Assembly System.IO.Compression.FileSystem
-                                [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $zipPath)
-                                "    Publishing Release v$($versionToDeploy.ToString()) @ commit Id [$($commitId)] to GitHub..."
+                                [ValidateNotNullOrWhiteSpace()][string]$versionToDeploy = $versionToDeploy.ToString()
                                 $ReleaseNotes = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
+                                [ValidateNotNullOrWhiteSpace()][string]$ReleaseNotes = $ReleaseNotes
+                                "    Creating Release ZIP..."
+                                $ZipTmpPath = [System.IO.Path]::Combine($PSScriptRoot, "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).zip")
+                                if ([IO.File]::Exists($ZipTmpPath)) { Remove-Item $ZipTmpPath -Force }
+                                Add-Type -Assembly System.IO.Compression.FileSystem
+                                [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $ZipTmpPath)
+                                "    Publishing Release v$versionToDeploy @ commit Id [$($commitId)] to GitHub..."
                                 $ReleaseNotes += (git log -1 --pretty=%B | Select-Object -Skip 2) -join "`n"
-                                $ReleaseNotes += $script:localizedData.ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy.ToString())
+                                $ReleaseNotes += $script:localizedData.ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy)
                                 Set-EnvironmentVariable -name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $ReleaseNotes
                                 $gitHubParams = @{
-                                    VersionNumber    = $versionToDeploy.ToString()
+                                    VersionNumber    = $versionToDeploy
                                     CommitId         = $commitId
                                     ReleaseNotes     = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
-                                    ArtifactPath     = $zipPath
+                                    ArtifactPath     = $ZipTmpPath
                                     GitHubUsername   = 'alainQtec'
                                     GitHubRepository = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
                                     GitHubApiKey     = $env:GitHubPAT
