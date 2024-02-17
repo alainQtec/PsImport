@@ -1367,17 +1367,18 @@ Process {
         $Host.UI.WriteLine(); Resolve-Module -Name $Name -UpdateModule -Verbose:$script:DefaultParameterValues['*-Module:Verbose'] -ErrorAction Stop
     }
     $build_sys = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem')
+    $lastCommit = git log -1 --pretty=%B
     Write-Heading "Current build system is $build_sys"
     Write-Heading "Finalizing build Prerequisites and Resolving dependencies ..."
     if ($build_sys -eq 'VSTS' -or ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
         if ($Task -contains 'Deploy') {
             $MSG = "Task is 'Deploy' and conditions for deployment are:`n" +
-            "    + GitHub API key is not null       : $([string]::IsNullOrWhiteSpace($env:GitHubPAT))`n" +
-            "    + Current branch is main           : $($Env:BUILD_SOURCEBRANCHNAME -eq 'main') [$Env:BUILD_SOURCEBRANCHNAME]`n" +
-            "    + Source is not a pull request     : $($Env:BUILD_SOURCEBRANCH -notlike '*pull*') [$Env:BUILD_SOURCEBRANCH]`n" +
-            "    + Commit message matches '!deploy' : $($Env:BUILD_SOURCEVERSIONMESSAGE -match '!deploy') [$Env:BUILD_SOURCEVERSIONMESSAGE]`n" +
+            "    + GitHub API key is not null       : $(![string]::IsNullOrWhiteSpace($env:GitHubPAT))`n" +
+            "    + Current branch is main           : $(($env:GITHUB_REF -replace "refs/heads/") -eq 'main')`n" +
+            "    + Source is not a pull request     : $($env:GITHUB_EVENT_NAME -ne "pull_request") [$env:GITHUB_EVENT_NAME]`n" +
+            "    + Commit message matches '!deploy' : $($lastCommit -match "!deploy") [$lastCommit]`n" +
             "    + Is Current PS version 5 ?        : $($PSVersionTable.PSVersion.Major -eq 5) [$($PSVersionTable.PSVersion.ToString())]`n" +
-            "    + NuGet API key is not null        : $($null -ne $env:NUGETAPIKEY)`n"
+            "    + NuGet API key is not null        : $(![string]::IsNullOrWhiteSpace($env:NUGETAPIKEY))`n"
             if ($PSVersionTable.PSVersion.Major -lt 5 -or [string]::IsNullOrWhiteSpace($env:NUGETAPIKEY) -or [string]::IsNullOrWhiteSpace($env:GitHubPAT) ) {
                 $MSG = $MSG.Replace('and conditions for deployment are:', 'but conditions are not correct for deployment.')
                 $MSG | Write-Host -ForegroundColor Yellow
