@@ -240,68 +240,77 @@ Begin {
                             $nextGalVer
                         }
                     }
-                    # Bump the module version
-                    if ($versionToDeploy) {
-                        try {
-                            $manifest = Import-PowerShellDataFile -Path $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
-                            [ValidateNotNullOrWhiteSpace()][string]$versionToDeploy = $versionToDeploy.ToString()
-                            $should_Publish_ToPsGallery = ![string]::IsNullOrWhiteSpace($env:NUGETAPIKEY)
-                            if ($should_Publish_ToPsGallery) {
-                                $manifestPath = Join-Path $outputModVerDir "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1"
-                                if (-not $manifest) {
-                                    $manifest = Import-PowerShellDataFile -Path $manifestPath
-                                }
-                                if ($manifest.ModuleVersion.ToString() -eq $versionToDeploy.ToString()) {
-                                    "    Manifest is already the expected version. Skipping manifest version update"
-                                } else {
-                                    "    Updating module version on manifest to [$($versionToDeploy)]"
-                                    Update-Metadata -Path $manifestPath -PropertyName ModuleVersion -Value $versionToDeploy -Verbose
-                                }
-                                Write-Host "    Publishing version [$($versionToDeploy)] to PSGallery..." -ForegroundColor Green
-                                Publish-Module -Path $outputModVerDir -NuGetApiKey $env:NUGETAPIKEY -Repository PSGallery -Verbose
-                                Write-Host "    Published to PsGallery successful!" -ForegroundColor Green
-                            } else {
-                                Write-Warning "    [SKIPPED] Deployment of version [$($versionToDeploy)] to PSGallery"
-                            }
-                            # Todo: Check current Github Release version before blindly publishing github release
-                            # $commitId = git rev-parse --verify HEAD
-                            # if (![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
-                            #     $ReleaseNotes = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
-                            #     [ValidateNotNullOrWhiteSpace()][string]$ReleaseNotes = $ReleaseNotes
-                            #     "    Creating Release ZIP..."
-                            #     $ZipTmpPath = [System.IO.Path]::Combine($PSScriptRoot, "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).zip")
-                            #     if ([IO.File]::Exists($ZipTmpPath)) { Remove-Item $ZipTmpPath -Force }
-                            #     Add-Type -Assembly System.IO.Compression.FileSystem
-                            #     [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $ZipTmpPath)
-                            #     Write-Heading "    Publishing Release v$versionToDeploy @ commit Id [$($commitId)] to GitHub..."
-                            #     $ReleaseNotes += (git log -1 --pretty=%B | Select-Object -Skip 2) -join "`n"
-                            #     $ReleaseNotes = $ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy)
-                            #     Set-EnvironmentVariable -name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $ReleaseNotes
-                            #     $gitHubParams = @{
-                            #         VersionNumber    = $versionToDeploy
-                            #         CommitId         = $commitId
-                            #         ReleaseNotes     = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
-                            #         ArtifactPath     = $ZipTmpPath
-                            #         GitHubUsername   = 'alainQtec'
-                            #         GitHubRepository = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
-                            #         GitHubApiKey     = $env:GitHubPAT
-                            #         Draft            = $false
-                            #     }
-                            #     Publish-GithubRelease @gitHubParams
-                            #     Write-Heading "    Github release created successful!"
-                            # } else {
-                            #     Write-BuildError "    SKIPPED Publishing GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
-                            # }
-                        } catch {
-                            $_ | Format-List * -Force
-                            Write-BuildError $_
-                        }
-                    } else {
+                    if (!$versionToDeploy) {
                         Write-Host -ForegroundColor Yellow "No module version matched! Negating deployment to prevent errors"
                         Set-EnvironmentVariable -name ($env:RUN_ID + 'CommitMessage') -Value $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')).Replace('!deploy', '')
                     }
+                    try {
+                        [ValidateNotNullOrWhiteSpace()][string]$versionToDeploy = $versionToDeploy.ToString()
+                        $manifest = Import-PowerShellDataFile -Path $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
+                        $latest_Github_release = Invoke-WebRequest "https://api.github.com/repos/alainQtec/PsImport/releases/latest" | ConvertFrom-Json
+                        $latest_Github_release = [PSCustomObject]@{
+                            name = $latest_Github_release.name
+                            ver  = [version]::new($latest_Github_release.tag_name.substring(1))
+                            url  = $latest_Github_release.html_url
+                        }
+                        $Latest_Module_Verion = Get-LatestModuleVersion -Name PsImport -Source PsGallery
+                        $Is_Lower_PsGallery_Version = [version]$versionToDeploy -le $Latest_Module_Verion
+                        $should_Publish_ToPsGallery = ![string]::IsNullOrWhiteSpace($env:NUGETAPIKEY) -and !$Is_Lower_PsGallery_Version
+                        $Is_Lower_GitHub_Version = [version]$versionToDeploy -le $latest_Github_release.ver
+                        $should_Publish_GitHubRelease = ![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID) -and !$Is_Lower_GitHub_Version
+                        if ($should_Publish_ToPsGallery) {
+                            $manifestPath = Join-Path $outputModVerDir "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1"
+                            if (-not $manifest) {
+                                $manifest = Import-PowerShellDataFile -Path $manifestPath
+                            }
+                            if ($manifest.ModuleVersion.ToString() -eq $versionToDeploy.ToString()) {
+                                "    Manifest is already the expected version. Skipping manifest version update"
+                            } else {
+                                "    Updating module version on manifest to [$versionToDeploy]"
+                                Update-Metadata -Path $manifestPath -PropertyName ModuleVersion -Value $versionToDeploy -Verbose
+                            }
+                            Write-Host "    Publishing version [$versionToDeploy] to PSGallery..." -ForegroundColor Green
+                            Publish-Module -Path $outputModVerDir -NuGetApiKey $env:NUGETAPIKEY -Repository PSGallery -Verbose
+                            Write-Host "    Published to PsGallery successful!" -ForegroundColor Green
+                        } else {
+                            if ($Is_Lower_PsGallery_Version) { Write-Warning "Module version $Latest_Module_Verion already exists on PsGallery!" }
+                            Write-verbose "    SKIPPED Publishing of version [$versionToDeploy] to PSGallery"
+                        }
+                        $commitId = git rev-parse --verify HEAD;
+                        if ($should_Publish_GitHubRelease) {
+                            $ReleaseNotes = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
+                            [ValidateNotNullOrWhiteSpace()][string]$ReleaseNotes = $ReleaseNotes
+                            "    Creating Release ZIP..."
+                            $ZipTmpPath = [System.IO.Path]::Combine($PSScriptRoot, "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).zip")
+                            if ([IO.File]::Exists($ZipTmpPath)) { Remove-Item $ZipTmpPath -Force }
+                            Add-Type -Assembly System.IO.Compression.FileSystem
+                            [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $ZipTmpPath)
+                            Write-Heading "    Publishing Release v$versionToDeploy @ commit Id [$($commitId)] to GitHub..."
+                            $ReleaseNotes += (git log -1 --pretty=%B | Select-Object -Skip 2) -join "`n"
+                            $ReleaseNotes = $ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy)
+                            Set-EnvironmentVariable -name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $ReleaseNotes
+                            $gitHubParams = @{
+                                VersionNumber    = $versionToDeploy
+                                CommitId         = $commitId
+                                ReleaseNotes     = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
+                                ArtifactPath     = $ZipTmpPath
+                                GitHubUsername   = 'alainQtec'
+                                GitHubRepository = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
+                                GitHubApiKey     = $env:GitHubPAT
+                                Draft            = $false
+                            }
+                            Publish-GithubRelease @gitHubParams
+                            Write-Heading "    Github release created successful!"
+                        } else {
+                            if ($Is_Lower_GitHub_Version) { Write-Warning "$($latest_release.name) already exists on Github!" }
+                            Write-verbose "    SKIPPED Publishing GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
+                        }
+                    } catch {
+                        $_ | Format-List * -Force
+                        Write-BuildError $_
+                    }
                 } else {
-                    Write-Host -ForegroundColor Magenta "Build system is not VSTS!"
+                    Write-Host -ForegroundColor Magenta "UNKNOWN Build system"
                 }
             }
         }

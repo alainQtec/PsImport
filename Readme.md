@@ -1,4 +1,4 @@
-# [**PsImport**](https://github.com/alainQtec/PsImport)
+# [**PsImport**](https://www.powershellgallery.com/packages/PsImport)
 
 A PowerShell module for dot-sourcing functions from scripts.
 
