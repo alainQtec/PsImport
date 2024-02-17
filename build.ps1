@@ -280,7 +280,7 @@ Begin {
                                 [System.IO.Compression.ZipFile]::CreateFromDirectory($outputModDir, $ZipTmpPath)
                                 "    Publishing Release v$versionToDeploy @ commit Id [$($commitId)] to GitHub..."
                                 $ReleaseNotes += (git log -1 --pretty=%B | Select-Object -Skip 2) -join "`n"
-                                $ReleaseNotes += $script:localizedData.ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy)
+                                $ReleaseNotes = $ReleaseNotes.Replace('<versionToDeploy>', $versionToDeploy)
                                 Set-EnvironmentVariable -name ('{0}{1}' -f $env:RUN_ID, 'ReleaseNotes') -Value $ReleaseNotes
                                 $gitHubParams = @{
                                     VersionNumber    = $versionToDeploy
