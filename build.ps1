@@ -26,7 +26,7 @@ param(
             if ($IsValid) {
                 return $true
             } else {
-                throw "ValidSet: $($Tasks -join ', ')."
+                throw [System.ArgumentException]::new('Task', "ValidSet: $($Tasks -join ', ').")
             }
         }
     )][ValidateNotNullOrEmpty()]
@@ -261,9 +261,10 @@ Begin {
                                     Update-Metadata -Path $manifestPath -PropertyName ModuleVersion -Value $versionToDeploy -Verbose
                                 }
                                 try {
-                                    "    Publishing version [$($versionToDeploy)] to PSGallery..."
+                                    Write-Host "    Publishing version [$($versionToDeploy)] to PSGallery..." -ForegroundColor Green
                                     Publish-Module -Path $outputModVerDir -NuGetApiKey $Env:NugetApiKey -Repository PSGallery -Verbose
-                                    "    Deployment successful!"
+                                    # Publish-Module -Path ([IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber'))) -NuGetApiKey $Env:NUGETAPIKEY -Repository PSGallery -Verbose
+                                    Write-Host "    Deployment successful!" -ForegroundColor Green
                                 } catch {
                                     $err = $_
                                     Write-BuildError $err.Exception.Message
@@ -344,7 +345,7 @@ Begin {
                 buildFile = $Psake_BuildFile.FullName
                 taskList  = $Task
             }
-            if ($Task -eq 'TestOnly') {
+            if ($Task -contains 'TestOnly') {
                 Set-Variable -Name ExcludeTag -Scope global -Value @('Module')
             } else {
                 Set-Variable -Name ExcludeTag -Scope global -Value $null
@@ -1388,21 +1389,21 @@ Process {
     }
     Write-Heading "Finalizing build Prerequisites and Resolving dependencies ..."
     if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem')) -eq 'VSTS') {
-        if ($Task -eq 'Deploy') {
+        if ($Task -contains 'Deploy') {
             $MSG = "Task is 'Deploy' and conditions for deployment are:`n" +
             "    + Current build system is VSTS     : $($Env:BUILD_BUILDURI -like 'vstfs:*') [$Env:BUILD_BUILDURI]`n" +
             "    + Current branch is main           : $($Env:BUILD_SOURCEBRANCHNAME -eq 'main') [$Env:BUILD_SOURCEBRANCHNAME]`n" +
             "    + Source is not a pull request     : $($Env:BUILD_SOURCEBRANCH -notlike '*pull*') [$Env:BUILD_SOURCEBRANCH]`n" +
             "    + Commit message matches '!deploy' : $($Env:BUILD_SOURCEVERSIONMESSAGE -match '!deploy') [$Env:BUILD_SOURCEVERSIONMESSAGE]`n" +
-            "    + Current PS major version is 5    : $($PSVersionTable.PSVersion.Major -eq 5) [$($PSVersionTable.PSVersion.ToString())]`n" +
-            "    + NuGet API key is not null        : $($null -ne $Env:NugetApiKey)`n"
+            "    + Is Current PS version 5 ?        : $($PSVersionTable.PSVersion.Major -eq 5) [$($PSVersionTable.PSVersion.ToString())]`n" +
+            "    + NuGet API key is not null        : $($null -ne $env:NUGETAPIKEY)`n"
             if (
                 $Env:BUILD_BUILDURI -notlike 'vstfs:*' -or
                 $Env:BUILD_SOURCEBRANCH -like '*pull*' -or
                 $Env:BUILD_SOURCEVERSIONMESSAGE -notmatch '!deploy' -or
                 $Env:BUILD_SOURCEBRANCHNAME -ne 'main' -or
                 $PSVersionTable.PSVersion.Major -ne 5 -or
-                $null -eq $Env:NugetApiKey
+                $null -eq $env:NugetApiKey
             ) {
                 $MSG = $MSG.Replace('and conditions for deployment are:', 'but conditions are not correct for deployment.')
                 $MSG | Write-Host -ForegroundColor Yellow
@@ -1477,7 +1478,7 @@ End {
     Write-EnvironmentSummary "Build finished"
     if (![bool][int]$env:IsAC) {
         Invoke-Command $Clean_EnvBuildvariables -ArgumentList $env:RUN_ID
+        [Environment]::SetEnvironmentVariable('RUN_ID', $null)
     }
-    [Environment]::SetEnvironmentVariable('RUN_ID', $null)
-    exit ( [int](!$psake.build_success) )
+    exit ([int](!$psake.build_success))
 }

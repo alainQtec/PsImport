@@ -12,4 +12,4 @@ jobs:
       - name: Publish
         env:
           NUGETAPIKEY: ${{ secrets.NUGETAPIKEY }}
-        run: $BuildScript = [IO.Path]::Combine((Get-Location).Path, 'build.ps1'); & $BuildScript; Publish-Module -Path ([IO.path]::Combine([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName') , [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildNumber'))) -NuGetApiKey $Env:NUGETAPIKEY -Repository PSGallery -Verbose
+        run: & $([IO.Path]::Combine((Get-Location).Path, 'build.ps1')) -Task Deploy
