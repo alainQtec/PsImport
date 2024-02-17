@@ -1,11 +1,11 @@
-name: Publish to PowerShell Gallery
+name: GitHub release and Publish
 on: [workflow_dispatch]
 defaults:
   run:
     shell: pwsh
 jobs:
   publish-to-gallery:
-    name: Build and Publish
+    name: Publish to PowerShell Gallery
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

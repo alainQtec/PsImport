@@ -195,10 +195,10 @@ Begin {
                     }
                     $current_build_version = $CurrentVersion = (Get-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).Version
                     $Latest_Module_Verion = Get-LatestModuleVersion -Name ([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')) -Source PsGallery
-                    "    Current version on the PSGallery is: $Latest_Module_Verion"
+                    "Module Current version on the PSGallery: $Latest_Module_Verion"
                     $galVerSplit = "$Latest_Module_Verion".Split('.')
                     $nextGalVer = [System.Version](($galVerSplit[0..($galVerSplit.Count - 2)] -join '.') + '.' + ([int]$galVerSplit[-1] + 1))
-
+                    # Bump MODULE Version
                     $versionToDeploy = switch ($true) {
                         ($commitVer -and ([System.Version]$commitVer -lt $nextGalVer)) {
                             Write-Host -ForegroundColor Yellow "Version in commit message is $commitVer, which is less than the next Gallery version and would result in an error. Possible duplicate deployment build, skipping module bump and negating deployment"
@@ -207,34 +207,34 @@ Begin {
                             break
                         }
                         ($commitVer -and ([System.Version]$commitVer -gt $nextGalVer)) {
-                            Write-Host -ForegroundColor Green "Module version to deploy: $commitVer [from commit message]"
+                            Write-Host -ForegroundColor Green "Module Bumped version: $commitVer [from commit message]"
                             [System.Version]$commitVer
                             break
                         }
                         ($CurrentVersion -ge $nextGalVer) {
-                            Write-Host -ForegroundColor Green "Module version to deploy: $CurrentVersion [from manifest]"
+                            Write-Host -ForegroundColor Green "Module Bumped version: $CurrentVersion [from manifest]"
                             $CurrentVersion
                             break
                         }
                         ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match '!hotfix') {
-                            Write-Host -ForegroundColor Green "Module version to deploy: $nextGalVer [commit message match '!hotfix']"
+                            Write-Host -ForegroundColor Green "Module Bumped version: $nextGalVer [commit message match '!hotfix']"
                             $nextGalVer
                             break
                         }
                         ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match '!minor') {
                             $minorVers = [System.Version]("{0}.{1}.{2}" -f $nextGalVer.Major, ([int]$nextGalVer.Minor + 1), 0)
-                            Write-Host -ForegroundColor Green "Module version to deploy: $minorVers [commit message match '!minor']"
+                            Write-Host -ForegroundColor Green "Module Bumped version: $minorVers [commit message match '!minor']"
                             $minorVers
                             break
                         }
                         ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match '!major') {
                             $majorVers = [System.Version]("{0}.{1}.{2}" -f ([int]$nextGalVer.Major + 1), 0, 0)
-                            Write-Host -ForegroundColor Green "Module version to deploy: $majorVers [commit message match '!major']"
+                            Write-Host -ForegroundColor Green "Module Bumped version: $majorVers [commit message match '!major']"
                             $majorVers
                             break
                         }
                         Default {
-                            Write-Host -ForegroundColor Green "Module version to deploy: $nextGalVer [PSGallery next version]"
+                            Write-Host -ForegroundColor Green "Module Bumped version: $nextGalVer [PSGallery next version]"
                             $nextGalVer
                         }
                     }
@@ -270,8 +270,8 @@ Begin {
                             Publish-Module -Path $outputModVerDir -NuGetApiKey $env:NUGETAPIKEY -Repository PSGallery -Verbose
                             Write-Host "    Published to PsGallery successful!" -ForegroundColor Green
                         } else {
-                            if ($Is_Lower_PsGallery_Version) { Write-Warning "Module version $Latest_Module_Verion already exists on PsGallery!" }
-                            Write-verbose "    SKIPPED Publishing of version [$versionToDeploy] to PSGallery"
+                            if ($Is_Lower_PsGallery_Version) { Write-Warning "SKIPPED Publishing. Module version $Latest_Module_Verion already exists on PsGallery!" }
+                            Write-verbose "    SKIPPED Publish of version [$versionToDeploy] to PSGallery"
                         }
                         $commitId = git rev-parse --verify HEAD;
                         if ($should_Publish_GitHubRelease) {
@@ -299,8 +299,8 @@ Begin {
                             Publish-GithubRelease @gitHubParams
                             Write-Heading "    Github release created successful!"
                         } else {
-                            if ($Is_Lower_GitHub_Version) { Write-Warning "Module version $current_build_version already exists on Github!" }
-                            Write-verbose "    SKIPPED Publishing GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
+                            if ($Is_Lower_GitHub_Version) { Write-Warning "SKIPPED Releasing. Module version $current_build_version already exists on Github!" }
+                            Write-verbose "    SKIPPED GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
                         }
                     } catch {
                         $_ | Format-List * -Force
