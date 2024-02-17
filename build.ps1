@@ -253,7 +253,7 @@ Begin {
                         }
                         $Is_Lower_PsGallery_Version = [version]$current_build_version -le $Latest_Module_Verion
                         $should_Publish_ToPsGallery = ![string]::IsNullOrWhiteSpace($env:NUGETAPIKEY) -and !$Is_Lower_PsGallery_Version
-                        $Is_Lower_GitHub_Version = [version]$versionToDeploy -le $latest_Github_release.ver
+                        $Is_Lower_GitHub_Version = [version]$current_build_version -le $latest_Github_release.ver
                         $should_Publish_GitHubRelease = ![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID) -and !$Is_Lower_GitHub_Version
                         if ($should_Publish_ToPsGallery) {
                             $manifestPath = Join-Path $outputModVerDir "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1"
