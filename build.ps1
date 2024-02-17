@@ -1388,7 +1388,8 @@ Process {
         $Host.UI.WriteLine(); Resolve-Module -Name $Name -UpdateModule -Verbose:$script:DefaultParameterValues['*-Module:Verbose'] -ErrorAction Stop
     }
     $build_sys = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem')
-    Write-Heading "Finalizing build Prerequisites and Resolving dependencies ... (Current build system is $build_sys)"
+    Write-Heading "Current build system is $build_sys"
+    Write-Heading "Finalizing build Prerequisites and Resolving dependencies ..."
     if ($build_sys -eq 'VSTS' -or ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
         if ($Task -contains 'Deploy') {
             $MSG = "Task is 'Deploy' and conditions for deployment are:`n" +
@@ -1398,20 +1399,13 @@ Process {
             "    + Commit message matches '!deploy' : $($Env:BUILD_SOURCEVERSIONMESSAGE -match '!deploy') [$Env:BUILD_SOURCEVERSIONMESSAGE]`n" +
             "    + Is Current PS version 5 ?        : $($PSVersionTable.PSVersion.Major -eq 5) [$($PSVersionTable.PSVersion.ToString())]`n" +
             "    + NuGet API key is not null        : $($null -ne $env:NUGETAPIKEY)`n"
-            if (
-                $Env:BUILD_BUILDURI -notlike 'vstfs:*' -or
-                $Env:BUILD_SOURCEBRANCH -like '*pull*' -or
-                $Env:BUILD_SOURCEVERSIONMESSAGE -notmatch '!deploy' -or
-                $Env:BUILD_SOURCEBRANCHNAME -ne 'main' -or
-                $PSVersionTable.PSVersion.Major -ne 5 -or
-                $null -eq $env:NugetApiKey
-            ) {
+            if ($PSVersionTable.PSVersion.Major -lt 5 -or [string]::IsNullOrWhiteSpace($env:NUGETAPIKEY)) {
                 $MSG = $MSG.Replace('and conditions for deployment are:', 'but conditions are not correct for deployment.')
                 $MSG | Write-Host -ForegroundColor Yellow
                 if (($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match '!deploy' -and $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "main") -or $script:ForceDeploy -eq $true) {
-                    Write-Warning "Force Deploy"
+                    Write-Warning "Force Deploying detected"
                 } else {
-                    "Skipping psake for this job!" | Write-Host -ForegroundColor Yellow
+                    "Skipping Psake for this job!" | Write-Host -ForegroundColor Yellow
                     exit 0
                 }
             } else {
@@ -1423,8 +1417,7 @@ Process {
             $Project_Name = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
             $Project_Path = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildOutput')
             Write-Heading "Importing $Project_Name to local scope"
-            $Module_Path = [IO.Path]::Combine($Project_Path, $Project_Name);
-            Invoke-CommandWithLog { Import-Module $Module_Path -Verbose }
+            Invoke-CommandWithLog { Import-Module $([IO.Path]::Combine($Project_Path, $Project_Name)) -Verbose }
         }
     } else {
         Invoke-Command -ScriptBlock $PSake_Build
