@@ -244,7 +244,9 @@ Begin {
                     if ($versionToDeploy) {
                         try {
                             $manifest = Import-PowerShellDataFile -Path $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
-                            if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem')) -eq 'VSTS' -and -not [String]::IsNullOrEmpty($Env:NugetApiKey)) {
+                            [ValidateNotNullOrWhiteSpace()][string]$versionToDeploy = $versionToDeploy.ToString()
+                            $should_Publish_ToPsGallery = ![string]::IsNullOrWhiteSpace($env:NUGETAPIKEY)
+                            if ($should_Publish_ToPsGallery) {
                                 $manifestPath = Join-Path $outputModVerDir "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).psd1"
                                 if (-not $manifest) {
                                     $manifest = Import-PowerShellDataFile -Path $manifestPath
@@ -264,7 +266,6 @@ Begin {
                             # Todo: Check current Github Release version before blindly publishing github release
                             # $commitId = git rev-parse --verify HEAD
                             # if (![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
-                            #     [ValidateNotNullOrWhiteSpace()][string]$versionToDeploy = $versionToDeploy.ToString()
                             #     $ReleaseNotes = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ReleaseNotes')
                             #     [ValidateNotNullOrWhiteSpace()][string]$ReleaseNotes = $ReleaseNotes
                             #     "    Creating Release ZIP..."
