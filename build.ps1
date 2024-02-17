@@ -299,7 +299,7 @@ Begin {
                             Publish-GithubRelease @gitHubParams
                             Write-Heading "    Github release created successful!"
                         } else {
-                            if ($Is_Lower_GitHub_Version) { Write-Warning "$($latest_release.name) already exists on Github!" }
+                            if ($Is_Lower_GitHub_Version) { Write-Warning "Module version $current_build_version already exists on Github!" }
                             Write-verbose "    SKIPPED Publishing GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
                         }
                     } catch {
