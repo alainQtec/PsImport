@@ -6,7 +6,7 @@ Pretty handy when working with complex powershell Projects with many functions s
 
 [![CI](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml/badge.svg)](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml)
 [![Upload artifact from Ubuntu](https://github.com/alainQtec/PsImport/actions/workflows/Upload_Artifact.yaml/badge.svg)](https://github.com/alainQtec/PsImport/actions/workflows/Upload_Artifact.yaml)
-[![Publish to PowerShell Gallery](https://github.com/alainQtec/PsImport/actions/workflows/Publish.yaml/badge.svg)](https://www.powershellgallery.com/packages/PsImport)
+[![Publish to PowerShell Gallery](https://github.com/alainQtec/PsImport/actions/workflows/Publish.yaml/badge.svg?branch=main)](https://github.com/alainQtec/PsImport/actions/workflows/Publish.yaml)
 
 ## **Installation**
 
