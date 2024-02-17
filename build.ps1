@@ -298,7 +298,8 @@ Begin {
                                 "    [SKIPPED] Publishing Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
                             }
                         } catch {
-                            Write-BuildError $_
+                            $_ | Format-List * -Force
+                            throw $_
                         }
                     } else {
                         Write-Host -ForegroundColor Yellow "No module version matched! Negating deployment to prevent errors"
