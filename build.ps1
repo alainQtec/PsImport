@@ -186,20 +186,15 @@ Begin {
                 $Env:PSModulePath = $origModulePath
             } -description 'Run Pester tests against compiled module'
 
-            Task Deploy -depends Test -description 'Deploy module to PSGallery' -preaction {
+            Task Deploy -depends Test -description 'Release new github version and Publish module to PSGallery' {
                 if (($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match '!deploy' -and $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "main") -or $script:ForceDeploy -eq $true) {
-                    if ($null -eq (Get-Module PoshTwit -ListAvailable)) {
-                        "    Installing PoshTwit module..."
-                        Install-Module PoshTwit -Scope CurrentUser
-                    }
-                    Import-Module PoshTwit -Verbose:$false
                     # Load the module, read the exported functions, update the psd1 FunctionsToExport
                     $commParsed = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage') | Select-String -Pattern '\sv\d+\.\d+\.\d+\s'
                     if ($commParsed) {
                         $commitVer = $commParsed.Matches.Value.Trim().Replace('v', '')
                     }
                     $CurrentVersion = (Get-Module $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).Version
-                    $galVer = '0.0.1'; if ($moduleInGallery = Find-Module "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))*" -Repository PSGallery) {
+                    $galVer = '0.0.1'; if ($moduleInGallery = Find-Module "$([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))*" -Repository PSGallery -ErrorAction Ignore) {
                         $galVer = $moduleInGallery.Version.ToString()
                         "    Current version on the PSGallery is: $galVer"
                     }
@@ -274,7 +269,7 @@ Begin {
                                 "    [SKIPPED] Deployment of version [$($versionToDeploy)] to PSGallery"
                             }
                             $commitId = git rev-parse --verify HEAD
-                            if (![string]::IsNullOrWhiteSpace($Env:GitHubPAT) -and [bool][int]$env:IsAC) {
+                            if (![string]::IsNullOrWhiteSpace($env:GitHubPAT) -and ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
                                 "    Creating Release ZIP..."
                                 $zipPath = [System.IO.Path]::Combine($PSScriptRoot, "$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))).zip")
                                 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
@@ -292,29 +287,13 @@ Begin {
                                     ArtifactPath     = $zipPath
                                     GitHubUsername   = 'alainQtec'
                                     GitHubRepository = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')
-                                    GitHubApiKey     = $Env:GitHubPAT
+                                    GitHubApiKey     = $env:GitHubPAT
                                     Draft            = $false
                                 }
                                 Publish-GithubRelease @gitHubParams
                                 "    Release creation successful!"
                             } else {
                                 "    [SKIPPED] Publishing Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
-                            }
-                            if ($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildSystem')) -eq 'VSTS' -and -not [String]::IsNullOrEmpty($Env:TwitterAccessSecret) -and -not [String]::IsNullOrEmpty($Env:TwitterAccessToken) -and -not [String]::IsNullOrEmpty($Env:TwitterConsumerKey) -and -not [String]::IsNullOrEmpty($Env:TwitterConsumerSecret)) {
-                                "    Publishing tweet about new release..."
-                                $text = "#$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName'))) v$($versionToDeploy) is now available on the #PSGallery! https://www.powershellgallery.com/packages/$($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'ProjectName')))/$($versionToDeploy.ToString()) #PowerShell"
-                                $manifest.PrivateData.PSData.Tags | ForEach-Object {
-                                    $text += " #$($_)"
-                                }
-                                if ($text.Length -gt 280) {
-                                    "    Trimming [$($text.Length - 280)] extra characters from tweet text to get to 280 character limit..."
-                                    $text = $text.Substring(0, 280)
-                                }
-                                "    Tweet text: $text"
-                                Publish-Tweet -Tweet $text -ConsumerKey $Env:TwitterConsumerKey -ConsumerSecret $Env:TwitterConsumerSecret -AccessToken $Env:TwitterAccessToken -AccessSecret $Env:TwitterAccessSecret
-                                "    Tweet successful!"
-                            } else {
-                                "    [SKIPPED] Twitter update of new release"
                             }
                         } catch {
                             Write-BuildError $_
@@ -1393,13 +1372,13 @@ Process {
     if ($build_sys -eq 'VSTS' -or ($env:CI -eq "true" -and $env:GITHUB_RUN_ID)) {
         if ($Task -contains 'Deploy') {
             $MSG = "Task is 'Deploy' and conditions for deployment are:`n" +
-            "    + Current build system is VSTS     : $($Env:BUILD_BUILDURI -like 'vstfs:*') [$Env:BUILD_BUILDURI]`n" +
+            "    + GitHub API key is not null       : $([string]::IsNullOrWhiteSpace($env:GitHubPAT))`n" +
             "    + Current branch is main           : $($Env:BUILD_SOURCEBRANCHNAME -eq 'main') [$Env:BUILD_SOURCEBRANCHNAME]`n" +
             "    + Source is not a pull request     : $($Env:BUILD_SOURCEBRANCH -notlike '*pull*') [$Env:BUILD_SOURCEBRANCH]`n" +
             "    + Commit message matches '!deploy' : $($Env:BUILD_SOURCEVERSIONMESSAGE -match '!deploy') [$Env:BUILD_SOURCEVERSIONMESSAGE]`n" +
             "    + Is Current PS version 5 ?        : $($PSVersionTable.PSVersion.Major -eq 5) [$($PSVersionTable.PSVersion.ToString())]`n" +
             "    + NuGet API key is not null        : $($null -ne $env:NUGETAPIKEY)`n"
-            if ($PSVersionTable.PSVersion.Major -lt 5 -or [string]::IsNullOrWhiteSpace($env:NUGETAPIKEY)) {
+            if ($PSVersionTable.PSVersion.Major -lt 5 -or [string]::IsNullOrWhiteSpace($env:NUGETAPIKEY) -or [string]::IsNullOrWhiteSpace($env:GitHubPAT) ) {
                 $MSG = $MSG.Replace('and conditions for deployment are:', 'but conditions are not correct for deployment.')
                 $MSG | Write-Host -ForegroundColor Yellow
                 if (($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'CommitMessage')) -match '!deploy' -and $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BranchName')) -eq "main") -or $script:ForceDeploy -eq $true) {
