@@ -1,6 +1,6 @@
 ﻿@{
     ModuleName    = 'PsImport'
-    ModuleVersion = [System.Management.Automation.SemanticVersion]::new(0, 1, 0, "preview")
+    ModuleVersion = [System.Management.Automation.SemanticVersion]::new(0, 1, 1)
     ReleaseNotes  = @"
 # Changelog`n`n
 
