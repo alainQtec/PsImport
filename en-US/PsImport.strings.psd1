@@ -4,9 +4,8 @@
     ReleaseNotes  = @"
 # Changelog`n`n
 
-* Added support for wilcard names
-* Added import from multiple files
-* Added import from url
+* Added Import from the same Github repo.
+  Now you don't need to specify the file path if It's in the same repo.
 
 `n`n***`n`n# Install guide:`n`n
 1. [Click here](https://github.com/alainQtec/PsImport/releases/download/v<versionToDeploy>/PsImport.zip) to download the *PsImport.zip* file attached to the release.
