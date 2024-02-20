@@ -36,7 +36,7 @@
         [string[]]$Name,
 
         # FilePath from which to import
-        [Parameter(Position = 1, Mandatory = $true)]
+        [Parameter(Position = 1, Mandatory = $false)]
         [ValidateNotNullOrEmpty()]
         [Alias('f', "from")]
         [string[]]$path,
@@ -52,6 +52,9 @@
     }
     process {
         try {
+            if (!$PSBoundParameters.ContainsKey('path')) {
+                $path = Resolve-FilePath $Name
+            }
             [PsImport]::GetFunctions(($Name -as [Query[]]), $path, ([string]$ErrorActionPreference -eq 'Stop')).Foreach({
                     $Functions += $_.scriptBlock
                 }
