@@ -34,7 +34,8 @@ Install-Module PsImport
 * **Import a function(s) from same repo**
 
     ```PowerShell
-    (Import funcName1, funcName2 -from fileNameb).ForEach({ . $_ })
+    Cd GitHubRepo
+    (Import funcName1, funcName2).ForEach({ . $_ })
     ```
 
     Will only load functions funcName1 and funcName2 from fileNameb.
