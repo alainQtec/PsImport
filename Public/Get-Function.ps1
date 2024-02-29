@@ -23,26 +23,31 @@
         # Using wildcards for names: All functions in the file get loaded in current script scope.
 
         (Import * -from '/relative/path/to/fileNamedlikeabc*.ps1').ForEach({ . $_ })
-        # Import all functions in files that look kike ileNamedlikeabc
+        # Import all functions in files that look like fileNamedlikeabc
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = "File")]
     [OutputType([System.Object[]])]
     [Alias("Import", "require", "Get-Functions")]
     param (
         # Query or Names of functions to import
-        [Parameter(Position = 0, Mandatory = $true, ParameterSetName = 'Name')]
+        [Parameter(Position = 0, Mandatory = $true, ParameterSetName = '__AllParameterSets')]
         [ValidateNotNullOrEmpty()]
         [Alias('n', 'names', 'function', 'functions')]
         [string[]]$Name,
 
         # FilePath from which to import
-        [Parameter(Position = 1, Mandatory = $false)]
+        [Parameter(Position = 1, Mandatory = $false, ParameterSetName = 'File')]
         [ValidateNotNullOrEmpty()]
-        [Alias('f', "from")]
+        [Alias('f', "file")]
         [string[]]$path,
 
+        [Parameter(Position = 1, Mandatory = $false, ParameterSetName = 'Url')]
+        [ValidateNotNullOrEmpty()]
+        [Alias("from", "uri")]
+        [uri[]]$rawUri,
+
         # Minimum version of function to import
-        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'Name')]
+        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = '__AllParameterSets')]
         [ValidateNotNull()][Alias('MinVersion')]
         [version]$Version
     )
@@ -55,7 +60,8 @@
             if (!$PSBoundParameters.ContainsKey('path')) {
                 $path = Resolve-FilePath $Name
             }
-            [PsImport]::GetFunctions(($Name -as [Query[]]), $path, ([string]$ErrorActionPreference -eq 'Stop')).Foreach({
+            $source = $(if ($PSCmdlet.ParameterSetName -eq "Url") { $rawUri } else { $path })
+            [PsImport]::GetFunctions(($Name -as [Query[]]), $source, ([string]$ErrorActionPreference -eq 'Stop')).Foreach({
                     $Functions += $_.scriptBlock
                 }
             )
