@@ -271,7 +271,7 @@ Begin {
                             Write-Host "    Published to PsGallery successful!" -ForegroundColor Green
                         } else {
                             if ($Is_Lower_PsGallery_Version) { Write-Warning "SKIPPED Publishing. Module version $Latest_Module_Verion already exists on PsGallery!" }
-                            Write-verbose "    SKIPPED Publish of version [$versionToDeploy] to PSGallery"
+                            Write-Verbose "    SKIPPED Publish of version [$versionToDeploy] to PSGallery"
                         }
                         $commitId = git rev-parse --verify HEAD;
                         if ($should_Publish_GitHubRelease) {
@@ -300,7 +300,7 @@ Begin {
                             Write-Heading "    Github release created successful!"
                         } else {
                             if ($Is_Lower_GitHub_Version) { Write-Warning "SKIPPED Releasing. Module version $current_build_version already exists on Github!" }
-                            Write-verbose "    SKIPPED GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
+                            Write-Verbose "    SKIPPED GitHub Release v$($versionToDeploy) @ commit Id [$($commitId)] to GitHub"
                         }
                     } catch {
                         $_ | Format-List * -Force
