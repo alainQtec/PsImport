@@ -55,6 +55,7 @@ Class PsImport {
                     throw [System.IO.InvalidDataException]::New("'$($path.FullName)' is not a valid filePath or HTTPS URL.")
                 }
                 if ([Regex]::IsMatch($path.FullName, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
+                    # $IsGistUrl = [Regex]::IsMatch($path.FullName, '^https:\gistregex')
                     $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
                     [void][PsImport]::DownloadFile($path.FullName, $outFile.FullName);
                     $_FilePaths += $outFile.FullName; Continue
@@ -161,47 +162,66 @@ Class PsImport {
         }
         return $OutptObject
     }
-    static [void] DownloadFile([string]$uri, [string]$outFile) {
-        [PsImport]::DownloadFile($uri, $outFile, $false)
+    static [IO.FileInfo] DownloadFile([uri]$url) {
+        # No $outFile so we create ones ourselves, and use suffix to prevent duplicaltes
+        $randomSuffix = [Guid]::NewGuid().Guid.subString(15).replace('-', [string]::Join('', (0..9 | Get-Random -Count 1)))
+        return [PsImport]::DownloadFile($url, "$(Split-Path $url.AbsolutePath -Leaf)_$randomSuffix");
     }
-    static [void] DownloadFile([string]$uri, [string]$outFile, [bool]$Force) {
-        [ValidateNotNullOrEmpty()][string]$uri = [uri]$uri;
-        [ValidateNotNullOrEmpty()][string]$outFile = [IO.Path]::GetFullPath($outFile)
+    static [IO.FileInfo] DownloadFile([uri]$url, [string]$outFile) {
+        return [PsImport]::DownloadFile($url, $outFile, $false)
+    }
+    static [IO.FileInfo] DownloadFile([uri]$url, [string]$outFile, [bool]$Force) {
+        [ValidateNotNullOrEmpty()][uri]$url = [uri]$url;
+        $outFile = [PsImport]::GetUnResolvedPath($outFile);
+        if ([System.IO.Directory]::Exists($outFile)) {
+            throw [InvalidOperationException]::new("outFile", "Please provide valid file path, not a directory.")
+        }
         if ((Test-Path -Path $outFile -PathType Leaf -ErrorAction Ignore)) {
             if (!$Force) { throw "$outFile already exists" }
             Remove-Item $outFile -Force -ErrorAction Ignore | Out-Null
         }
-        $Name = Split-Path $uri -Leaf;
-        [version]$dotNET_Framework_version = [string]::Join('.', [System.Environment]::Version.Major, [System.Environment]::Version.Minor)
-        if ($dotNET_Framework_version -ge [version]'4.5') {
-            # since System.Net.Http.HttpCompletionOption enumeration is not available in .NET Framework versions prior to 4.5
-            # &yes this is faster than iwr, so u better off update your dotnet versions.
-            Write-Verbose "Downloading $Name to $Outfile ... "
-            $client = [System.Net.Http.HttpClient]::New()
-            $client.DefaultRequestHeaders.Add("x-ms-download-header-content-disposition", "attachment")
-            $client.DefaultRequestHeaders.Add("x-ms-download-content-type", "application/octet-stream")
-            $client.DefaultRequestHeaders.Add("x-ms-download-length", "0")
-            $client.DefaultRequestHeaders.Add("x-ms-download-id", [Guid]::NewGuid().ToString())
-            # Download the file and save it to a Stream
-            $response = $client.GetAsync($uri, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).Result
-            $contents = $response.Content; if ($null -eq $contents) { Throw [System.InvalidOperationException]::New('Got $null HttpResponse.Result.content. Please Try again.') }
-            $stream = $contents.ReadAsStreamAsync().Result
-            # Create a FileStream object to write the data to the file
-            $fileStream = [System.IO.FileStream]::new($outFile, [System.IO.FileMode]::Create)
-            # Copy the data from the Stream to the FileStream
-            $stream.CopyTo($fileStream)
-            # Close the Stream and FileStream
-            $stream.Close()
-            $fileStream.Close()
-            Write-Verbose "Download Complete."
-        } else {
-            Write-Debug "Using iwr :(" -Debug
-            Invoke-WebRequest -Uri $uri -OutFile $outFile -Verbose:$false
+        $stream = $null; $fileStream = $null; $name = Split-Path $url -Leaf;
+        $request = [System.Net.HttpWebRequest]::Create($url)
+        $request.UserAgent = "Mozilla/5.0"
+        $response = $request.GetResponse()
+        $contentLength = $response.ContentLength
+        $stream = $response.GetResponseStream()
+        $buffer = New-Object byte[] 1024
+        $fileStream = [System.IO.FileStream]::new($outFile, [System.IO.FileMode]::CreateNew)
+        $totalBytesReceived = 0
+        $totalBytesToReceive = $contentLength
+        while ($totalBytesToReceive -gt 0) {
+            $bytesRead = $stream.Read($buffer, 0, 1024)
+            $totalBytesReceived += $bytesRead
+            $totalBytesToReceive -= $bytesRead
+            $fileStream.Write($buffer, 0, $bytesRead)
+            $percentComplete = [int]($totalBytesReceived / $contentLength * 100)
+            Write-Progress -Activity "Downloading $name to $Outfile" -Status "Progress: $percentComplete%" -PercentComplete $percentComplete
         }
+        try { Invoke-Command -ScriptBlock { $stream.Close(); $fileStream.Close() } -ErrorAction SilentlyContinue } catch { $null }
+        return (Get-Item $outFile)
     }
     static hidden [string[]] GetCommandSources() {
         [string[]]$availableSources = @(Get-Command -CommandType Function | Select-Object Source -Unique).Source | Where-Object { $_.Length -gt 0 }
         return $availableSources
+    }
+    static [string] GetResolvedPath([string]$Path) {
+        return [PsImport]::GetResolvedPath($((Get-Variable ExecutionContext).Value.SessionState), $Path)
+    }
+    static [string] GetResolvedPath([System.Management.Automation.SessionState]$session, [string]$Path) {
+        $paths = $session.Path.GetResolvedPSPathFromPSPath($Path);
+        if ($paths.Count -gt 1) {
+            throw [System.IO.IOException]::new([string]::Format([cultureinfo]::InvariantCulture, "Path {0} is ambiguous", $Path))
+        } elseif ($paths.Count -lt 1) {
+            throw [System.IO.IOException]::new([string]::Format([cultureinfo]::InvariantCulture, "Path {0} not Found", $Path))
+        }
+        return $paths[0].Path
+    }
+    static [string] GetUnResolvedPath([string]$Path) {
+        return [PsImport]::GetUnResolvedPath($((Get-Variable ExecutionContext).Value.SessionState), $Path)
+    }
+    static [string] GetUnResolvedPath([System.Management.Automation.SessionState]$session, [string]$Path) {
+        return $session.Path.GetUnresolvedProviderPathFromPSPath($Path)
     }
     static hidden [bool] IsValidSource([String]$Source, [bool]$throwOnFailure) {
         $IsValid = $Source -in [PsImport]::GetCommandSources()
@@ -305,6 +325,7 @@ class FunctionDetails {
     }
 }
 #endregion Classes
+
 $Private = Get-ChildItem ([IO.Path]::Combine($PSScriptRoot, 'Private')) -Filter "*.ps1" -ErrorAction SilentlyContinue
 $Public = Get-ChildItem ([IO.Path]::Combine($PSScriptRoot, 'Public')) -Filter "*.ps1" -ErrorAction SilentlyContinue
 # Load dependencies
