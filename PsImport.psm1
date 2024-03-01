@@ -54,10 +54,13 @@ Class PsImport {
                 if (!$path.Scheme.IsValid) {
                     throw [System.IO.InvalidDataException]::New("'$($path.FullName)' is not a valid filePath or HTTPS URL.")
                 }
+                if ($path.Scheme.IsGistUrl) {
+                    Write-Verbose "Use Ciphertron github functions"
+                    Get-GistContent -
+                    Pause
+                }
                 if ([Regex]::IsMatch($path.FullName, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) {
-                    # $IsGistUrl = [Regex]::IsMatch($path.FullName, '^https:\gistregex')
-                    $outFile = [IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))
-                    [void][PsImport]::DownloadFile($path.FullName, $outFile.FullName);
+                    $outFile = [PsImport]::DownloadFile($path.FullName, $([IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))).FullName);
                     $_FilePaths += $outFile.FullName; Continue
                 }; $_FilePaths += $path.FullName
             }
@@ -152,12 +155,14 @@ Class PsImport {
                 Write-Debug "'$text' has invalidPathChars in it !" -Debug
             }
         }
-        $isValid = $Scheme -in @('file', 'https')
+        $IsValid = $Scheme -in @('file', 'https')
+        $IsGistUrl = [Regex]::IsMatch($text, "^https://gist.github.com/[a-z0-9]+(?:/[a-z0-9]+)?$")
         $OutptObject = [pscustomobject]@{
             FullName = $text
             Scheme   = [PSCustomObject]@{
-                Name    = $Scheme
-                IsValid = $isValid
+                Name      = $Scheme
+                IsValid   = $IsValid
+                IsGistUrl = $IsGistUrl
             }
         }
         return $OutptObject
