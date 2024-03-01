@@ -199,7 +199,7 @@
                     }
                 }
                 $IsValid = $Scheme -in @('file', 'https')
-                $IsGistUrl = [Regex]::IsMatch($text, "^https://gist.github.com/[a-z0-9]+(?:/[a-z0-9]+)?$")
+                $IsGistUrl = [Regex]::IsMatch($text, 'https?://gist\.github\.com/\w+/[0-9a-f]+')
                 $OutptObject = [pscustomobject]@{
                     FullName = $text
                     Scheme   = [PSCustomObject]@{
@@ -513,8 +513,8 @@
                     for ($i = 1; $i -lt $iterations + 1; $i++) {
                         # if ($UnProtect) { $_bytes = [xconvert]::ToUnProtected($_bytes, $Salt, [EncryptionScope]::User) }
                         # Split the real encrypted bytes from nonce & tags then decrypt them:
-                ($b, $n1) = [Shuffl3r]::Split($_bytes, $Password, $TAG_SIZE);
-                ($b, $n2) = [Shuffl3r]::Split($b, $Password, $IV_SIZE);
+                        ($b, $n1) = [Shuffl3r]::Split($_bytes, $Password, $TAG_SIZE);
+                        ($b, $n2) = [Shuffl3r]::Split($b, $Password, $IV_SIZE);
                         $Decrypted = [byte[]]::new($b.Length);
                         $aes.Decrypt($n2, $b, $n1, $Decrypted, $associatedData);
                         $_bytes = $Decrypted;
@@ -649,7 +649,7 @@
 
     process {
         $content = [string]::Empty
-        if ($PSBoundParameters.Count -eq 1) {
+        if ($PSBoundParameters.Keys.Count -eq 1) {
             if ([GitHub]::ParseLink($FileName, $false).Scheme.IsValid) {
                 $PrsdUrl = [GitHub]::ParseLink($FileName, $false)
                 if ($PrsdUrl.Scheme.IsGistUrl) {
@@ -658,14 +658,9 @@
                     $fn0 = ($res.files[0] | Get-Member -MemberType noteproperty).Name[0]
                     $content = $res.files.$fn0.content
                 } else {
-                    Write-Warning "Please Provide a valid Gist Url"
+                    Write-Error "Please Provide a valid Gist Url"
                 }
-            } else {
-                $PSBoundParameters['GistUrl'] = $FileName
-                $PSBoundParameters['FileName'] = [string]::Empty
             }
-            Write-Verbose "fn : $FileName"
-            Write-Verbose "gu : $GistUrl"
         } else {
             $content = [GitHub]::GetGistContent($FileName, [uri]::new($GistUrl))
         }
