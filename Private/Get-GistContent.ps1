@@ -637,8 +637,19 @@
                 $_pass = if ([AesCrypt]::EncryptionScope.ToString() -eq "Machine") {
                     [AesCrypt]::GetSecureString([AesCrypt]::GetUniqueMachineId())
                 } else {
-                    Read-Host -Prompt "Password" -AsSecureString
+                    $password = [SecureString]::new();
+                    [Console]::Write("Enter your password: ");
+                    while ($true) {
+                        [ConsoleKeyInfo]$key = [Console]::ReadKey($true);
+                        if ($key.Key -eq [ConsoleKey]::Enter) {
+                            break;
+                        }
+                        $password.AppendChar($key.KeyChar);
+                        [Console]::Write("*");
+                    }
+                    $password
                 }
+                [Console]::WriteLine();
                 return $_pass
             }
             static [void] ValidateCompression([string]$Compression) {
