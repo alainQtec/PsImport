@@ -211,7 +211,7 @@
                 return $OutptObject
             }
             static [string] Get_Host_Os() {
-                # Todo: Should return one of these: [Enum]::GetNames([System.PlatformID])
+                # Should return one of these: [Enum]::GetNames([System.PlatformID])
                 return $(if ($(Get-Variable IsWindows -Value)) { "Windows" }elseif ($(Get-Variable IsLinux -Value)) { "Linux" }elseif ($(Get-Variable IsMacOS -Value)) { "macOS" }else { "UNKNOWN" })
             }
             static [IO.DirectoryInfo] Get_dataPath([string]$appName, [string]$SubdirName) {
