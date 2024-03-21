@@ -60,8 +60,7 @@
                 }; return $f
             }
         )
-        # TODO: Add functionality for the $Exclude param. By default will be filled with all paths in the gitIgnore ie:
-        # [IO.File]::ReadAllLines([IO.Path]::Combine($ExecutionContext.SessionState.Path.CurrentLocation, '.gitignore')).Where({!$_.StartsWith('#') -and ![string]::IsNullOrWhiteSpace($_)})
+        [string[]]$Exclude = [IO.File]::ReadAllLines([IO.Path]::Combine($ExecutionContext.SessionState.Path.CurrentLocation, '.gitignore')).Where({ !$_.StartsWith('#') -and ![string]::IsNullOrWhiteSpace($_) })
     }
     process {
         forEach ($p in $pathsToSearch) {
