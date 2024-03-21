@@ -34,5 +34,6 @@
     "files.encoding": "utf8",
     "[powershell]": {
         "files.encoding": "utf8bom"
-    }
+    },
+    "CodeGPT.apiKey": "Anthropic"
 }
