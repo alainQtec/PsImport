@@ -217,7 +217,7 @@
             static [IO.DirectoryInfo] Get_dataPath([string]$appName, [string]$SubdirName) {
                 $_Host_OS = [GitHub]::Get_Host_Os()
                 $dataPath = if ($_Host_OS -eq 'Windows') {
-                    [System.IO.DirectoryInfo]::new([IO.Path]::Combine($Env:HOME, "AppData", $appName, $SubdirName))
+                    [System.IO.DirectoryInfo]::new([IO.Path]::Combine($Env:HOME, "AppData", "Roaming", $appName, $SubdirName))
                 } elseif ($_Host_OS -in ('Linux', 'MacOs')) {
                     [System.IO.DirectoryInfo]::new([IO.Path]::Combine((($env:PSModulePath -split [IO.Path]::PathSeparator)[0] | Split-Path | Split-Path), $appName, $SubdirName))
                 } elseif ($_Host_OS -eq 'Unknown') {
@@ -263,8 +263,9 @@
                 return $cs
             }
         }
+
         class GistFile {
-            [string]$Name
+            [ValidateNotNullOrEmpty()][string]$Name # with extention
             [string]$language
             [string]$raw_url
             [bool]$IsPublic
@@ -276,7 +277,7 @@
             GistFile([string]$filename) {
                 $this.Name = $filename
             }
-            GistFile([PsObject]$InputObject) {
+            GistFile([psobject]$InputObject) {
                 $this.language = $InputObject.language
                 $this.IsPublic = $InputObject.IsPublic
                 $this.raw_url = $InputObject.raw_url
@@ -286,6 +287,8 @@
                 $this.size = $InputObject.size
                 $this.Id = $InputObject.Id
             }
+
+
             [string] ShowFileInfo() {
                 return "File: $($this.Name)"
             }
