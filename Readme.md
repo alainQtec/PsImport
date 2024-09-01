@@ -1,10 +1,16 @@
 # [**PsImport**](https://www.powershellgallery.com/packages/PsImport)
 
-A PowerShell module for dot-sourcing functions from scripts.
+A PowerShell module for importing functions.
 
-Pretty handy when working with complex powershell Projects with many functions spread across multiple files.
+>Note:
+If you just want to import a nested module then add
+`using module /relative/path/to/module.psm1`
+at the top of your rootmodule; thats it!
+This module is only useful when working with powershell projects where functions are spread across multiple folders or somewhere online.
 
-[![CI](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml/badge.svg)](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml)
+
+[![CI](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml/badge.svg)](https://github.com/alainQtec/PsImport/actions/workflows/CI.yaml) ie: [v2 WIP](alainQtec.dev/projects/#workingOn)
+
 [![Publish to PowerShell Gallery](https://github.com/alainQtec/PsImport/actions/workflows/Publish.yaml/badge.svg?branch=main)](https://github.com/alainQtec/PsImport/actions/workflows/Publish.yaml)
 
 ## **Installation**
