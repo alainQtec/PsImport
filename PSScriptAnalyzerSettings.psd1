@@ -1,5 +1,4 @@
 ﻿@{
-
     IncludeDefaultRules = $true
 
     ExcludeRules        = @(
@@ -27,7 +26,7 @@
             Enable              = $true
             Kind                = 'space'
             PipelineIndentation = 'IncreaseIndentationForFirstPipeline'
-            IndentationSize     = 4
+            IndentationSize     = 2
         }
 
         PSUseConsistentWhitespace  = @{
