@@ -1184,8 +1184,12 @@ $MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
   }
 }.GetNewClosure();
 
-$Public = Get-ChildItem ([IO.Path]::Combine($PSScriptRoot, 'Public')) -Filter "*.ps1" -ErrorAction SilentlyContinue
-foreach ($file in $Public) {
+$scripts = @();
+$Public = Get-ChildItem "$PSScriptRoot/Public" -Filter "*.ps1" -Recurse -ErrorAction SilentlyContinue
+$scripts += Get-ChildItem "$PSScriptRoot/Private" -Filter "*.ps1" -Recurse -Recurse -ErrorAction SilentlyContinue
+$scripts += $Public
+
+foreach ($file in $scripts) {
   Try {
     if ([string]::IsNullOrWhiteSpace($file.fullname)) { continue }
     . "$($file.fullname)"
@@ -1194,4 +1198,10 @@ foreach ($file in $Public) {
     $host.UI.WriteErrorLine($_)
   }
 }
-Export-ModuleMember -Function @('Get-Function', 'Resolve-FilePath') -Alias @('Import', 'require')
+
+$Param = @{
+  Function = $Public.BaseName
+  Cmdlet   = '*'
+  Alias    = '*'
+}
+Export-ModuleMember @Param -Verbose
