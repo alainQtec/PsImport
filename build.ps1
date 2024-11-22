@@ -113,6 +113,7 @@ Begin {
         $ModuleManifest = [IO.FileInfo]::New([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModuleManifest'))
         Write-Verbose "Add Module files ..."
         try {
+          $d = [Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModulePath')
           @(
             "en-US"
             "Private"
@@ -120,7 +121,13 @@ Begin {
             "LICENSE"
             "$($ModuleManifest.Name)"
             "$ProjectName.psm1"
-          ).ForEach({ Copy-Item -Recurse -Path $([IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildScriptPath')), $_)) -Destination $([Environment]::GetEnvironmentVariable($env:RUN_ID + 'PSModulePath')) })
+          ).ForEach({
+              $p = [IO.Path]::Combine($([Environment]::GetEnvironmentVariable($env:RUN_ID + 'BuildScriptPath')), $_)
+              if (Test-Path -Path $p -ErrorAction Ignore) {
+                Copy-Item -Recurse -Path $p -Destination $d
+              }
+            }
+          )
         } catch {
           throw $_
         }

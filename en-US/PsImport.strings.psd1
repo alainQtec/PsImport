@@ -1,9 +1,10 @@
 ﻿@{
   ModuleName    = 'PsImport'
-  ModuleVersion = [System.Management.Automation.SemanticVersion]::new(0, 1, 2)
+  ModuleVersion = [System.Management.Automation.SemanticVersion]::new(0, 1, 3)
   ReleaseNotes  = @"
 # Changelog`n`n
 
+* Fixed import errors.
 * Now returns FunctionDetails[]
 
 `n`n***`n`n# Install guide:`n`n
