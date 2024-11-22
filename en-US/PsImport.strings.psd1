@@ -1,11 +1,10 @@
 ﻿@{
-    ModuleName    = 'PsImport'
-    ModuleVersion = [System.Management.Automation.SemanticVersion]::new(0, 1, 1)
-    ReleaseNotes  = @"
+  ModuleName    = 'PsImport'
+  ModuleVersion = [System.Management.Automation.SemanticVersion]::new(0, 1, 2)
+  ReleaseNotes  = @"
 # Changelog`n`n
 
-* Added Import from the same Github repo.
-  Now you don't need to specify the file path if It's in the same repo.
+* Now returns FunctionDetails[]
 
 `n`n***`n`n# Install guide:`n`n
 1. [Click here](https://github.com/alainQtec/PsImport/releases/download/v<versionToDeploy>/PsImport.zip) to download the *PsImport.zip* file attached to the release.
