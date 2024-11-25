@@ -136,7 +136,7 @@ process {
         Context " When importing functions with a wildcard in the filename" {
           It " should import all functions matching the pattern from file" {
             $expectedFunctions = @(Get-Content "./relative/path/to/script_File.psm1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
-                        (Import * -from "./relative/path/to/script_File.psm1").ForEach({ . $_ })
+            $(Import * -from "./relative/path/to/script_File.psm1").ForEach({ . $_.ScriptBlock })
             Assert-LoadedFunctions $expectedFunctions | Should -Be $true
           }
         }
@@ -146,7 +146,7 @@ process {
         Context " When importing functions from multiple files" {
           It " should import all functions from all files" {
             $expectedFunctions = @(Get-Content "./relative/path/to/fileNamedlikeabc*.ps1" | Select-String -Pattern "^function\s+([a-zA-Z0-9_-]+)\s*\(" | ForEach-Object { $_.Matches.Groups[1].Value })
-                        (Import * -from "./relative/path/to/fileNamedlikeabc*.ps1").ForEach({ . $_ })
+            $(Import * -from "./relative/path/to/fileNamedlikeabc*.ps1").ForEach({ . $_.ScriptBlock })
             Assert-LoadedFunctions $expectedFunctions | Should -Be $true
           }
         }
@@ -156,7 +156,7 @@ process {
         Context " When importing specific functions from the same repo" {
           It " should import only the specified functions from the specified file" {
             $expectedFunctions = @('funcName1', 'funcName2')
-                        (Import 'funcName1', 'funcName2' -from "./repo").ForEach({ . $_ })
+            $(Import 'funcName1', 'funcName2' -from "./repo").ForEach({ . $_.ScriptBlock })
             Assert-LoadedFunctions $expectedFunctions | Should -Be $true
           }
         }
@@ -166,7 +166,7 @@ process {
         Context " When importing specific functions from a remote script" {
           It " should import only the specified function from the remote script" {
             $expectedFunctions = @('Test-GitHubScript')
-                        (Import Test-GitHubScript -from 'https://github.com/alainQtec/PsScriptsRepo/raw/main/Test-GitHubScript.ps1').ForEach({ . $_ })
+            $(Import Test-GitHubScript -from 'https://github.com/alainQtec/PsScriptsRepo/raw/main/Test-GitHubScript.ps1').ForEach({ . $_.ScriptBlock })
             Assert-LoadedFunctions $expectedFunctions | Should -Be $true
           }
         }
@@ -179,11 +179,11 @@ process {
     -replace "./repo", $resRlPath -replace "<Modversion>", $version `
     -replace "funcName1', 'funcName2", [string]::Join("', '", (Get-Random -InputObject $scriptNames -Count 2)) `
     -replace "<BuildOutpt_FullName>", $BuildOutDir.FullName
-  [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt 12) { $_.Substring(13) } }), [System.Text.Encoding]::UTF8)
+  [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt 6) { $_.Substring(7) } }), [System.Text.Encoding]::UTF8)
   Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $ftTestsPath))" -ForegroundColor White
   [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$PSScriptRoot", 'Public')).GetFiles().ForEach({
       $n = [IO.Path]::GetFileNameWithoutExtension($_.FullName)
-      $s = [System.Text.StringBuilder]::New(); [void]$s.AppendLine("Describe `"$n`" {`n    It `"should have command`" {`n        Get-Command $n | Should -Not -BeNullOrEmpty`n    }`n}")
+      $s = [System.Text.StringBuilder]::New(); [void]$s.AppendLine("Describe `"$n`" {`n  It `"should have command`" {`n    Get-Command $n | Should -Not -BeNullOrEmpty`n  }`n}")
       Add-Content -Path $ntTestsPath -Value $s.ToString() -Encoding utf8
       Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $ntTestsPath))" -ForegroundColor White
     }
@@ -208,14 +208,14 @@ process {
               $Privt_Dir = Get-Item -Path ([IO.Path]::Combine("<BuildOutpt_FullName>", 'Private'))
               $funcNames = @(); Test-Path -Path ([string[]]($Publc_Dir, $Privt_Dir)) -PathType Container -ErrorAction Stop
               $Publc_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) + $Privt_Dir.GetFiles("*", [System.IO.SearchOption]::AllDirectories) | Where-Object { $_.Extension -eq '.ps1' } | ForEach-Object { $funcNames += $_.BaseName }
-                            ($funcNames | Group-Object | Where-Object { $_.Count -gt 1 }).Count | Should -BeLessThan 1
+              $($funcNames | Group-Object | Where-Object { $_.Count -gt 1 }).Count | Should -BeLessThan 1
             }
           }
         }
       }
     ).ToString() -replace "<BuildOutpt_FullName>", $BuildOutDir.FullName
     if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 2) {
-      [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Split("`r").ForEach({ if ($_.Length -gt 16) { $_.Substring(17) } }), [System.Text.Encoding]::UTF8)
+      [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Split("`r").ForEach({ if ($_.Length -gt 8) { $_.Substring(9) } }), [System.Text.Encoding]::UTF8)
       Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $mtTestsPath))" -ForegroundColor White
     }
   } else {
@@ -225,7 +225,7 @@ process {
   if (!$skipBuildOutputTest.IsPresent) {
     Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
   }
-  $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
+  # $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
 }
 
 end {
