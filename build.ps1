@@ -12,7 +12,7 @@
     This Will build the module, Import it and run tests using the ./Test-Module.ps1 script.
 .EXAMPLE
     ./build.ps1 -Task deploy
-    Will build the module, test it and deploy it to PsGallery
+    Will build the module, test it and deploy it to PsGallery (only if $psake.build_success)
 #>
 [cmdletbinding(DefaultParameterSetName = 'task')]
 param(
