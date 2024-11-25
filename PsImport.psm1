@@ -1157,7 +1157,7 @@ function Resolve-FilePath {
 $typestoExport = @(
   [PsImport]
 )
-$TypeAcceleratorsClass = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
+$TypeAcceleratorsClass = [PsObject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
 foreach ($Type in $typestoExport) {
   if ($Type.FullName -in $TypeAcceleratorsClass::Get.Keys) {
     $Message = @(
@@ -1186,7 +1186,7 @@ $MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
 
 $scripts = @();
 $Public = Get-ChildItem "$PSScriptRoot/Public" -Filter "*.ps1" -Recurse -ErrorAction SilentlyContinue
-$scripts += Get-ChildItem "$PSScriptRoot/Private" -Filter "*.ps1" -Recurse -Recurse -ErrorAction SilentlyContinue
+$scripts += Get-ChildItem "$PSScriptRoot/Private" -Filter "*.ps1" -Recurse -ErrorAction SilentlyContinue
 $scripts += $Public
 
 foreach ($file in $scripts) {
@@ -1204,4 +1204,4 @@ $Param = @{
   Cmdlet   = '*'
   Alias    = '*'
 }
-Export-ModuleMember @Param -Verbose
+Export-ModuleMember @Param
