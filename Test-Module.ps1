@@ -84,6 +84,7 @@ begin {
       Write-Output $result
     }
   )
+  $indentation_size = Get-ModuleManifest -Path "$PSScriptRoot/PSScriptAnalyzerSettings.psd1" -PropertyName IndentationSize
   function script:Assert-LoadedFunctions {
     param ([Parameter(Mandatory)][string[]]$Names)
     $f = Get-Command -CommandType Function | Select-Object -ExpandProperty Name
@@ -153,7 +154,7 @@ process {
       }
       #3. Test feature: Importing a function(s) from same repo
       Describe "Importing specific functions from the same repo" {
-        Context " When importing specific functions from the same repo" {
+        Context " When importing functions from the same repo" {
           It " should import only the specified functions from the specified file" {
             $expectedFunctions = @('funcName1', 'funcName2')
             $(Import 'funcName1', 'funcName2' -from "./repo").ForEach({ . $_.ScriptBlock })
@@ -163,7 +164,7 @@ process {
       }
       #4. Test feature: Importing a function(s) from a remote script
       Describe "Importing specific functions from a remote script" {
-        Context " When importing specific functions from a remote script" {
+        Context " When importing functions from a remote script" {
           It " should import only the specified function from the remote script" {
             $expectedFunctions = @('Test-GitHubScript')
             $(Import Test-GitHubScript -from 'https://github.com/alainQtec/PsScriptsRepo/raw/main/Test-GitHubScript.ps1').ForEach({ . $_.ScriptBlock })
@@ -179,7 +180,7 @@ process {
     -replace "./repo", $resRlPath -replace "<Modversion>", $version `
     -replace "funcName1', 'funcName2", [string]::Join("', '", (Get-Random -InputObject $scriptNames -Count 2)) `
     -replace "<BuildOutpt_FullName>", $BuildOutDir.FullName
-  [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt 6) { $_.Substring(7) } }), [System.Text.Encoding]::UTF8)
+  [IO.File]::WriteAllLines($ftTestsPath, $ftTestScrpt.Split("`r").ForEach({ if ($_.Length -gt ($indentation_size * 3)) { $_.Substring((($indentation_size * 3) + 1)) } }), [System.Text.Encoding]::UTF8)
   Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $ftTestsPath))" -ForegroundColor White
   [System.IO.DirectoryInfo]::new([IO.Path]::Combine("$PSScriptRoot", 'Public')).GetFiles().ForEach({
       $n = [IO.Path]::GetFileNameWithoutExtension($_.FullName)
@@ -215,7 +216,7 @@ process {
       }
     ).ToString() -replace "<BuildOutpt_FullName>", $BuildOutDir.FullName
     if (($BuildOutDir.EnumerateFiles().count | Measure-Object -Sum).Sum -gt 2) {
-      [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Split("`r").ForEach({ if ($_.Length -gt 8) { $_.Substring(9) } }), [System.Text.Encoding]::UTF8)
+      [IO.File]::WriteAllLines($mtTestsPath, $ModuleTestScript.Split("`r").ForEach({ if ($_.Length -gt ($indentation_size * 4)) { $_.Substring((($indentation_size * 4) + 1)) } }), [System.Text.Encoding]::UTF8)
       Write-Host "    Created $([IO.Path]::GetRelativePath($PSScriptRoot, $mtTestsPath))" -ForegroundColor White
     }
   } else {
@@ -225,7 +226,7 @@ process {
   if (!$skipBuildOutputTest.IsPresent) {
     Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
   }
-  # $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
+  $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
 }
 
 end {

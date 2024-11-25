@@ -15,6 +15,8 @@
   .LINK
       https://github.com/alainQtec/PsImport/blob/main/Public/Get-Function.ps1
   .EXAMPLE
+      Import Test-GitHubScript -from https://github.com/alainQtec/PsScriptsRepo/raw/main/Test-GitHubScript.ps1
+  .EXAMPLE
       (Import fnName1, fnName2 -From '/relative/path/to/script.ps1').ScriptBlock.ForEach({ . $_ })
       # Imports the functions fnName1 fnName2
 
@@ -54,14 +56,13 @@
 
   begin {
     $Functions = [FunctionDetails[]]@()
+    $throwOnFailure = [string]$ErrorActionPreference -eq 'Stop'
   }
   process {
     try {
-      if (!$PSBoundParameters.ContainsKey('path')) {
-        $path = Resolve-FilePath $Name
-      }
+      if ($PSCmdlet.ParameterSetName -eq "File" -and !$PSBoundParameters.ContainsKey('path')) { $path = Resolve-FilePath $Name }
       $source = $(if ($PSCmdlet.ParameterSetName -eq "Url") { $rawUri } else { $path })
-      [PsImport]::GetFunctions(($Name -as [Query[]]), $source, ([string]$ErrorActionPreference -eq 'Stop')).Foreach({
+      [PsImport]::GetFunctions(($Name -as [Query[]]), $source, $throwOnFailure).Foreach({
           $Functions += $_
         }
       )
