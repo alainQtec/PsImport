@@ -68,12 +68,12 @@ begin {
     if (!(Get-PackageProvider -Name Nuget)) {
       Install-PackageProvider -Name NuGet -Force | Out-Null
     }
-    if (!(Get-Module PsCraft -ListAvailable -ErrorAction Ignore)) { Install-Module PsCraft -Verbose:$false };
-    $(Get-InstalledModule PsCraft -ErrorAction Ignore).InstalledLocation | Split-Path | Import-Module -Verbose:$false
   }
 }
 process {
   Register-PackageFeed -ForceBootstrap
+  if (!(Get-Module PsCraft -ListAvailable -ErrorAction Ignore)) { Install-Module PsCraft -Verbose:$false };
+  $(Get-InstalledModule PsCraft -ErrorAction Ignore).InstalledLocation | Split-Path | Import-Module -Verbose:$false
   if ($PSCmdlet.ParameterSetName -eq 'help') {
     Build-Module -Help
   } else {
