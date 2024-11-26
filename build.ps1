@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    PsImport buildScript
+    PsImport buildScript v0.1.4
 .DESCRIPTION
     A custom Psake buildScript for the module PsImport.
 .LINK
