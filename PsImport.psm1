@@ -14,7 +14,7 @@ Class PsImport {
         $Fn.Text.Equals('*') { foreach ($Name in $AllNames) { $res += [PsImport]::GetFunctions($Name) } ; break }
         $Fn.Text.Contains('*') {
           $Fn_Names = @($AllNames | Where-Object { $_ -like $Fn.Text }); $NotFound = ($Fn_Names | Where-Object { $_ -notin $AllNames }).Count -gt 0
-          if ($NotFound -and $throwOnFailure) { throw [ItemNotFoundException]::New($($Fn_Names -join ', ')) };
+          if ($NotFound -and $throwOnFailure) { throw [System.Management.Automation.ItemNotFoundException]::New($($Fn_Names -join ', ')) };
           $Fn_Names; break
         }
         $([PsImport]::IsValidSource($FnNames, $false)) { $(Get-Command -CommandType Function | Where-Object { $_.Source -eq "$($Fn.Text)" } | Select-Object -ExpandProperty Name); break }
@@ -32,7 +32,7 @@ Class PsImport {
     }
     if ($res.Count -eq 0) {
       $_Message = "Could not find function(s). Named: $($FnNames -join ', ')"
-      if ($throwOnFailure) { throw [ItemNotFoundException]::New($_Message) }
+      if ($throwOnFailure) { throw [System.Management.Automation.ItemNotFoundException]::New($_Message) }
       $(Get-Variable -Name host).Value.UI.WriteWarningLine("$_Message")
     }
     return $res
@@ -42,16 +42,16 @@ Class PsImport {
     [ValidateNotNullOrEmpty()][string[]]$FilePaths = $FilePaths; [ValidateNotNullOrEmpty()][Query[]]$FnNames = $FnNames
     $result = @(); $FilePaths = $FilePaths.Where({ ![string]::IsNullOrWhiteSpace($_) })
     $items = $FilePaths.ForEach({ if ([PsImport]::IsValidUri($_)) { "$_" } else { Resolve-FilePath "$_" -Extensions '.ps1', '.psm1' } }).Where({ ![string]::IsNullOrWhiteSpace("$_") })
-    $items = ($items | Select-Object @{l='Parsed'; e= { [PsImport]::ParseLink($_) } }).Parsed
+    $items = ($items | Select-Object @{l = 'Parsed'; e = { [PsImport]::ParseLink($_) } }).Parsed
     $invalid = $items.Where({ !$_.Scheme.IsValid })
     $gisturl = $items.Where({ $_.Scheme.IsGistUrl })
     if ($invalid.Count -gt 0 -and $throwOnFailure) { throw [IO.InvalidDataException]::New("'$($invalid)' is not a valid filePath or HTTPS URL.") }
     if ($gisturl.Count -gt 0 -and $throwOnFailure) { throw "Get-GistContent is not implemented yet" }
-    $_FilePaths = ($items.Where({ $_.Scheme.IsValid -and !$_.Scheme.IsGistUrl }) | Select-Object @{l='Path'; e= { if ([Regex]::IsMatch($_.FullName, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) { [PsImport]::DownloadFile($_.FullName, $([IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))).FullName).FullName } else { $_.FullName } } }).Path
+    $_FilePaths = ($items.Where({ $_.Scheme.IsValid -and !$_.Scheme.IsGistUrl }) | Select-Object @{l = 'Path'; e = { if ([Regex]::IsMatch($_.FullName, '^https:\/\/[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:[0-9]+)?\/?.*$')) { [PsImport]::DownloadFile($_.FullName, $([IO.FileInfo]::New([IO.Path]::ChangeExtension([IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName()), '.ps1'))).FullName).FullName } else { $_.FullName } } }).Path
     if ($_FilePaths.count -eq 0 -and $throwOnFailure) { throw [IO.FileNotFoundException]::New("$FilePaths") }
 
     $_FilePaths = $_FilePaths | Sort-Object -Unique
-    $_Functions = ($_FilePaths | Select-Object @{l='Parsed'; e= { [PsImport]::ParseFile($_) } }).Parsed
+    $_Functions = ($_FilePaths | Select-Object @{l = 'Parsed'; e = { [PsImport]::ParseFile($_) } }).Parsed
     if (!$FnNames.Text.Contains('*')) {
       foreach ($q in $FnNames) {
         $result += $(if ($q.Text.Contains('*')) {
