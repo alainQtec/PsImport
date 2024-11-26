@@ -56,6 +56,17 @@ param(
   [switch]$Help
 )
 begin {
+  if ($null -eq (Get-PSRepository -Name PSGallery -ErrorAction Ignore)) {
+    Unregister-PSRepository -Name PSGallery -Verbose:$false -ErrorAction Ignore
+    Register-PSRepository -Default -InstallationPolicy Trusted
+  }
+  if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
+    Invoke-CommandWithLog { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -Verbose:$false }
+  }
+  Invoke-CommandWithLog { Get-PackageProvider -Name Nuget -ForceBootstrap -Verbose:$false }
+  if (!(Get-PackageProvider -Name Nuget)) {
+    Invoke-CommandWithLog { Install-PackageProvider -Name NuGet -Force | Out-Null }
+  }
   if (!(Get-Module PsCraft -ListAvailable -ErrorAction Ignore)) { Install-Module PsCraft -Verbose:$false };
   $(Get-InstalledModule PsCraft -ErrorAction Ignore).InstalledLocation | Split-Path | Import-Module -Verbose:$false
 }
