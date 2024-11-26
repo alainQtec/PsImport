@@ -72,8 +72,14 @@ begin {
 }
 process {
   Register-PackageFeed -ForceBootstrap
-  if (!(Get-Module PsCraft -ListAvailable -ErrorAction Ignore)) { Install-Module PsCraft -Verbose:$false };
-  $(Get-InstalledModule PsCraft -ErrorAction Ignore).InstalledLocation | Split-Path | Import-Module -Verbose:$false
+  # Import any required modules
+  @(
+    "PsCraft"
+  ).ForEach({
+      if (!(Get-Module $_ -ListAvailable -ErrorAction Ignore)) { Install-Module $_ -Verbose:$false };
+      $(Get-InstalledModule $_ -ErrorAction Ignore).InstalledLocation | Split-Path | Import-Module -Verbose:$false
+    }
+  )
   if ($PSCmdlet.ParameterSetName -eq 'help') {
     Build-Module -Help
   } else {
