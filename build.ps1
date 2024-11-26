@@ -55,6 +55,7 @@ param(
   [Alias('h', '-help')]
   [switch]$Help
 )
+
 begin {
   function Register-PackageFeed ([switch]$ForceBootstrap) {
     if ($null -eq (Get-PSRepository -Name PSGallery -ErrorAction Ignore)) {
@@ -69,17 +70,29 @@ begin {
       Install-PackageProvider -Name NuGet -Force | Out-Null
     }
   }
+  function Read-ModulePsd1([IO.DirectoryInfo]$folder) {
+    $p = [IO.Path]::Combine($folder.FullName, "$($folder.BaseName).psd1"); $d = [IO.File]::ReadAllText($p);
+    return [scriptblock]::Create("$d").Invoke()
+  }
+  function Import-rmodule([string]$Name) {
+    if (!(Get-Module $Name -ListAvailable -ErrorAction Ignore)) { Install-Module $Name -Verbose:$false };
+    $(Get-InstalledModule $Name -ErrorAction Stop).InstalledLocation | Split-Path | Import-Module -Verbose:$false
+  }
+  function Import-RequiredModules ([IO.DirectoryInfo]$RootPath, [string[]]$Names, [switch]$UseSelf) {
+    $self = [IO.Path]::Combine($RootPath.FullName, "$($RootPath.BaseName).psm1")
+    if ([IO.File]::Exists($self) -and $UseSelf) {
+      $Names.ForEach({ Import-rmodule $_ })
+      Write-Host "<< Import current build of [$($RootPath.BaseName)] <<" -f Green # (done after requirements are imported)
+      Import-Module ([IO.Path]::Combine($RootPath.FullName, "$($RootPath.BaseName).psd1"))
+    } else {
+      $Names.ForEach({ Import-rmodule $_ })
+    }
+  }
 }
 process {
   Register-PackageFeed -ForceBootstrap
-  # Import any required modules
-  @(
-    "PsCraft"
-  ).ForEach({
-      if (!(Get-Module $_ -ListAvailable -ErrorAction Ignore)) { Install-Module $_ -Verbose:$false };
-      $(Get-InstalledModule $_ -ErrorAction Ignore).InstalledLocation | Split-Path | Import-Module -Verbose:$false
-    }
-  )
+  $data = Read-ModulePsd1 -folder ([IO.DirectoryInfo]::new($Path))
+  Import-RequiredModules -RootPath $Path -Names $data.RequiredModules
   if ($PSCmdlet.ParameterSetName -eq 'help') {
     Build-Module -Help
   } else {
