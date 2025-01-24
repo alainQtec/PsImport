@@ -3,19 +3,19 @@ using namespace System.IO
 using namespace System.Management.Automation
 <#
 .SYNOPSIS
-    PsImport buildScript v0.1.4
+  PsImport buildScript v0.1.4
 .DESCRIPTION
-    A custom Psake buildScript for the module PsImport.
+  A custom Psake buildScript for the module PsImport.
 .LINK
-    https://github.com/alainQtec/PsImport/blob/main/build.ps1
+  https://github.com/alainQtec/PsImport/blob/main/build.ps1
 .EXAMPLE
-    Running ./build.ps1 will only "Init, Compile & Import" the module; That's it, no tests.
-    To run tests Use:
-    ./build.ps1 -Task Test
-    This Will build the module, Import it and run tests using the ./Test-Module.ps1 script.
+  Running ./build.ps1 will only "Init, Compile & Import" the module; That's it, no tests.
+  To run tests Use:
+  ./build.ps1 -Task Test
+  This Will build the module, Import it and run tests using the ./Test-Module.ps1 script.
 .EXAMPLE
-    ./build.ps1 -Task deploy
-    Will build the module, test it and deploy it to PsGallery (only if $psake.build_success)
+  ./build.ps1 -Task deploy
+  Will build the module, test it and deploy it to PsGallery (only if $psake.build_success)
 #>
 [cmdletbinding(DefaultParameterSetName = 'task')]
 param(
@@ -60,9 +60,16 @@ param(
 
 begin {
   if ($PSCmdlet.ParameterSetName -eq 'help') { Get-Help $MyInvocation.MyCommand.Source -Full | Out-String | Write-Host -f Green; return }
-  $req = Invoke-WebRequest -Method Get -Uri https://raw.githubusercontent.com/alainQtec/PsCraft/refs/heads/main/Public/Build-Module.ps1 -SkipHttpErrorCheck
-  if ($req.StatusCode -ne 200) { throw "Failed to download Build-Module.ps1" }
-  . ([ScriptBlock]::Create("$($req.Content)"))
+  $IsGithubRun = ![string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable('GITHUB_WORKFLOW'))
+  if ($($IsGithubRun ? $true : $(try { (Test-Connection "https://www.github.com" -Count 2 -TimeoutSeconds 1 -ea Ignore -Verbose:$false | Select-Object -expand Status) -contains "Success" } catch { Write-Warning "Test Connection Failed. $($_.Exception.Message)"; $false }))) {
+    $req = Invoke-WebRequest -Method Get -Uri https://raw.githubusercontent.com/alainQtec/PsCraft/refs/heads/main/Public/Build-Module.ps1 -SkipHttpErrorCheck -Verbose:$false
+    if ($req.StatusCode -ne 200) { throw "Failed to download Build-Module.ps1" }
+    $t = New-Item $([IO.Path]::GetTempFileName().Replace('.tmp', '.ps1')) -Verbose:$false; Set-Content -Path $t.FullName -Value $req.Content; . $t.FullName; Remove-Item $t.FullName -Verbose:$false
+  } else {
+    $m = Get-InstalledModule PsCraft -Verbose:$false -ea Ignore
+    $b = [IO.FileInfo][IO.Path]::Combine($m.InstalledLocation, 'Public', 'Build-Module.ps1')
+    if ($b.Exists) { . $b.FullName }
+  }
 }
 process {
   Build-Module -Task $Task -Path $Path -Import:$Import
