@@ -226,7 +226,7 @@ process {
   if (!$skipBuildOutputTest.IsPresent) {
     Test-ModuleManifest -Path $manifestFile.FullName -ErrorAction Stop -Verbose
   }
-  $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile "$TestsPath\results.xml" -PassThru
+  $TestResults = Invoke-Pester -Path $TestsPath -OutputFormat NUnitXml -OutputFile ([IO.Path]::Combine($TestsPath, "results.xml")) -PassThru
 }
 
 end {
